@@ -119,6 +119,44 @@ class API extends Handler {
 		print $this->wrap(self::STATUS_OK, $feeds);
 	}
 
+	function addFeed() {
+		$cat_id = (int) db_escape_string($_REQUEST["cat_id"]);
+	  	$feed_url = db_escape_string($_REQUEST["feed_url"]);
+
+		if ($cat_id == null){
+			$cat_id = 0;
+		}
+
+		if ($feed_url == null){
+			print $this->wrap(self::STATUS_ERR, array("error" => 'INCORRECT_USAGE'));
+			return;
+		}
+
+		$rc = subscribe_to_feed($this->link, $feed_url, $cat_id);
+
+		switch ($rc['code']) {
+		case 0:
+		case 1:
+			print $this->wrap(self::STATUS_OK, array("status" => "OK"));
+			break;
+		case 2:
+			print $this->wrap(self::STATUS_ERR, array("error" => "INVALID_URL"));
+			break;
+		case 3:
+			print $this->wrap(self::STATUS_ERR, array("error" => "NO_FEEDS_AVAILABLE"));
+			break;
+		case 4:
+			print $this->wrap(self::STATUS_ERR, array("error" => "TOO_MANY_FEEDS"));
+			break;
+		case 5:
+			print $this->wrap(self::STATUS_ERR, array("error" => "COULD_NOT_DOWNLOAD"));
+			break;
+		default:
+			print $this->wrap(self::STATUS_ERR, array("error" => "UNEXPECTED_ERROR: $rc"));
+			break;
+		}
+	}
+
 	function getCategories() {
 		$unread_only = (bool)db_escape_string($_REQUEST["unread_only"]);
 		$enable_nested = (bool)db_escape_string($_REQUEST["enable_nested"]);
