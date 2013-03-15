@@ -152,7 +152,7 @@ class API extends Handler {
 			print $this->wrap(self::STATUS_ERR, array("error" => "COULD_NOT_DOWNLOAD"));
 			break;
 		default:
-			print $this->wrap(self::STATUS_ERR, array("error" => "UNEXPECTED_RETURN_CODE: $rc['code']"));
+			print $this->wrap(self::STATUS_ERR, array("error" => "UNEXPECTED_RETURN_CODE: ".$rc['code']));
 			break;
 		}
 	}
