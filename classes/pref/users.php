@@ -116,7 +116,7 @@ class Pref_Users extends Handler_Protected {
 
 			header("Content-Type: text/xml");
 
-			$id = db_escape_string($_REQUEST["id"]);
+			$id = db_escape_string($this->link, $_REQUEST["id"]);
 
 			print "<dlg id=\"$method\">";
 			print "<title>".__('User Editor')."</title>";
@@ -199,11 +199,11 @@ class Pref_Users extends Handler_Protected {
 		}
 
 		function editSave() {
-			$login = db_escape_string(trim($_REQUEST["login"]));
-			$uid = db_escape_string($_REQUEST["id"]);
+			$login = db_escape_string($this->link, trim($_REQUEST["login"]));
+			$uid = db_escape_string($this->link, $_REQUEST["id"]);
 			$access_level = (int) $_REQUEST["access_level"];
-			$email = db_escape_string(trim($_REQUEST["email"]));
-			$password = db_escape_string(trim($_REQUEST["password"]));
+			$email = db_escape_string($this->link, trim($_REQUEST["email"]));
+			$password = db_escape_string($this->link, trim($_REQUEST["password"]));
 
 			if ($password) {
 				$salt = substr(bin2hex(get_random_bytes(125)), 0, 250);
@@ -214,13 +214,13 @@ class Pref_Users extends Handler_Protected {
 			}
 
 			db_query($this->link, "UPDATE ttrss_users SET $pass_query_part login = '$login',
-				access_level = '$access_level', email = '$email', otp_enabled = 'false'
+				access_level = '$access_level', email = '$email', otp_enabled = false
 				WHERE id = '$uid'");
 
 		}
 
 		function remove() {
-			$ids = split(",", db_escape_string($_REQUEST["ids"]));
+			$ids = split(",", db_escape_string($this->link, $_REQUEST["ids"]));
 
 			foreach ($ids as $id) {
 				if ($id != $_SESSION["uid"] && $id != 1) {
@@ -233,7 +233,7 @@ class Pref_Users extends Handler_Protected {
 
 		function add() {
 
-			$login = db_escape_string(trim($_REQUEST["login"]));
+			$login = db_escape_string($this->link, trim($_REQUEST["login"]));
 			$tmp_user_pwd = make_password(8);
 			$salt = substr(bin2hex(get_random_bytes(125)), 0, 250);
 			$pwd_hash = encrypt_password($tmp_user_pwd, $salt, true);
@@ -270,11 +270,9 @@ class Pref_Users extends Handler_Protected {
 			}
 		}
 
-		function resetPass() {
+		static function resetUserPassword($link, $uid, $show_password) {
 
-			$uid = db_escape_string($_REQUEST["id"]);
-
-			$result = db_query($this->link, "SELECT login,email
+			$result = db_query($link, "SELECT login,email
 				FROM ttrss_users WHERE id = '$uid'");
 
 			$login = db_fetch_result($result, 0, "login");
@@ -286,18 +284,20 @@ class Pref_Users extends Handler_Protected {
 
 			$pwd_hash = encrypt_password($tmp_user_pwd, $new_salt, true);
 
-			db_query($this->link, "UPDATE ttrss_users SET pwd_hash = '$pwd_hash', salt = '$new_salt'
+			db_query($link, "UPDATE ttrss_users SET pwd_hash = '$pwd_hash', salt = '$new_salt'
 				WHERE id = '$uid'");
 
-			print T_sprintf("Changed password of user <b>%s</b>
-				 to <b>%s</b>", $login, $tmp_user_pwd);
+			if ($show_password) {
+				print T_sprintf("Changed password of user <b>%s</b>
+					to <b>%s</b>", $login, $tmp_user_pwd);
+			} else {
+				print T_sprintf("Sending new password of user <b>%s</b>
+					to <b>%s</b>", $login, $email);
+			}
 
-			require_once 'lib/phpmailer/class.phpmailer.php';
+			require_once 'classes/ttrssmailer.php';
 
 			if ($email) {
-				print " ";
-				print T_sprintf("Notifying <b>%s</b>.", $email);
-
 				require_once "lib/MiniTemplator.class.php";
 
 				$tpl = new MiniTemplator;
@@ -313,35 +313,19 @@ class Pref_Users extends Handler_Protected {
 
 				$tpl->generateOutputToString($message);
 
-				$mail = new PHPMailer();
+				$mail = new ttrssMailer();
 
-				$mail->PluginDir = "lib/phpmailer/";
-				$mail->SetLanguage("en", "lib/phpmailer/language/");
-
-				$mail->CharSet = "UTF-8";
-
-				$mail->From = SMTP_FROM_ADDRESS;
-				$mail->FromName = SMTP_FROM_NAME;
-				$mail->AddAddress($email, $login);
-
-				if (SMTP_HOST) {
-					$mail->Host = SMTP_HOST;
-					$mail->Mailer = "smtp";
-					$mail->SMTPAuth = SMTP_LOGIN != '';
-					$mail->Username = SMTP_LOGIN;
-					$mail->Password = SMTP_PASSWORD;
-				}
-
-				$mail->IsHTML(false);
-				$mail->Subject = __("[tt-rss] Password change notification");
-				$mail->Body = $message;
-
-				$rc = $mail->Send();
+				$rc = $mail->quickMail($email, $login,
+					__("[tt-rss] Password change notification"),
+					$message, false);
 
 				if (!$rc) print_error($mail->ErrorInfo);
 			}
+		}
 
-			print "</div>";
+		function resetPass() {
+			$uid = db_escape_string($this->link, $_REQUEST["id"]);
+			Pref_Users::resetUserPassword($this->link, $uid, true);
 		}
 
 		function index() {
@@ -353,7 +337,7 @@ class Pref_Users extends Handler_Protected {
 
 			print "<div id=\"pref-user-toolbar\" dojoType=\"dijit.Toolbar\">";
 
-			$user_search = db_escape_string($_REQUEST["search"]);
+			$user_search = db_escape_string($this->link, $_REQUEST["search"]);
 
 			if (array_key_exists("search", $_REQUEST)) {
 				$_SESSION["prefs_user_search"] = $user_search;
@@ -368,7 +352,7 @@ class Pref_Users extends Handler_Protected {
 					__('Search')."</button>
 				</div>";
 
-			$sort = db_escape_string($_REQUEST["sort"]);
+			$sort = db_escape_string($this->link, $_REQUEST["sort"]);
 
 			if (!$sort || $sort == "undefined") {
 				$sort = "login";

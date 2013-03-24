@@ -6,7 +6,7 @@ class GoogleReaderKeys extends Plugin {
 
 	function about() {
 		return array(1.0,
-			"Keyboard hotkeys like Google Reader",
+			"Keyboard hotkeys emulate Google Reader",
 			"markwaters");
 	}
 
@@ -19,13 +19,16 @@ class GoogleReaderKeys extends Plugin {
 
 	function hook_hotkey_map($hotkeys) {
 
-		$hotkeys["j"] = "next_article_noscroll";
-		$hotkeys["N"] = "next_feed";
-		$hotkeys["k"] = "prev_article_noscroll";
-		$hotkeys["P"] = "prev_feed";
-		$hotkeys["v"] = "open_in_new_window";
-		$hotkeys["(32)|space"] = "next_article";
-		$hotkeys["r"] = "feed_refresh";
+		$hotkeys["j"]		= "next_article_noscroll";
+		$hotkeys["k"]		= "prev_article_noscroll";
+		$hotkeys["*n"]		= "next_feed";
+		$hotkeys["*p"]		= "prev_feed";
+		$hotkeys["v"]		= "open_in_new_window";
+		$hotkeys["r"]		= "feed_refresh";
+		$hotkeys["m"]		= "toggle_unread";
+		$hotkeys["(32)|space"]	= "next_article";
+		$hotkeys["(38)|up"]	= "article_scroll_up";
+		$hotkeys["(40)|down"]	= "article_scroll_down";
 
 		return $hotkeys;
 

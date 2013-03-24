@@ -547,7 +547,7 @@ function resetSelectedUserPass() {
 			new Ajax.Request("backend.php", {
 				parameters: query,
 				onComplete: function(transport) {
-					notify_info(transport.responseText);
+					notify_info(transport.responseText, true);
 				} });
 
 		}
@@ -719,6 +719,13 @@ function editSelectedFeeds() {
 								if (!query.match("&cache_images=") &&
 										this.getChildByName('cache_images').attr('disabled') == false) {
 									query = query + "&cache_images=false";
+								}
+							} catch (e) { }
+
+							try {
+								if (!query.match("&hide_images=") &&
+										this.getChildByName('hide_images').attr('disabled') == false) {
+									query = query + "&hide_images=false";
 								}
 							} catch (e) { }
 

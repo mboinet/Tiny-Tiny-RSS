@@ -21,14 +21,14 @@ class Share extends Plugin {
 	}
 
 	function hook_article_button($line) {
-		return "<img src=\"".theme_image($this->link, 'plugins/share/share.png')."\"
+		return "<img src=\"plugins/share/share.png\"
 			class='tagsPic' style=\"cursor : pointer\"
 			onclick=\"shareArticle(".$line['int_id'].")\"
 			title='".__('Share by URL')."'>";
 	}
 
 	function shareArticle() {
-		$param = db_escape_string($_REQUEST['param']);
+		$param = db_escape_string($this->link, $_REQUEST['param']);
 
 		$result = db_query($this->link, "SELECT uuid, ref_id FROM ttrss_user_entries WHERE int_id = '$param'
 			AND owner_uid = " . $_SESSION['uid']);
@@ -41,7 +41,7 @@ class Share extends Plugin {
 			$ref_id = db_fetch_result($result, 0, "ref_id");
 
 			if (!$uuid) {
-				$uuid = db_escape_string(sha1(uniqid(rand(), true)));
+				$uuid = db_escape_string($this->link, sha1(uniqid(rand(), true)));
 				db_query($this->link, "UPDATE ttrss_user_entries SET uuid = '$uuid' WHERE int_id = '$param'
 					AND owner_uid = " . $_SESSION['uid']);
 			}

@@ -2,7 +2,7 @@
 class Handler_Public extends Handler {
 
 	private function generate_syndicated_feed($owner_uid, $feed, $is_cat,
-		$limit, $offset, $search, $search_mode, $match_on,
+		$limit, $offset, $search, $search_mode,
 		$view_mode = false, $format = 'atom') {
 
 		require_once "lib/MiniTemplator.class.php";
@@ -21,11 +21,13 @@ class Handler_Public extends Handler {
 		}
 
 		if ($feed == -2)
-			$date_sort_field = "last_read";
+			$date_sort_field = "last_published";
+		else if ($feed == -1)
+			$date_sort_field = "last_marked";
 
 		$qfh_ret = queryFeedHeadlines($this->link, $feed,
 			$limit, $view_mode, $is_cat, $search, $search_mode,
-			$match_on, "$date_sort_field DESC", $offset, $owner_uid,
+			"$date_sort_field DESC", $offset, $owner_uid,
 			false, 0, false, true);
 
 		$result = $qfh_ret[0];
@@ -180,7 +182,7 @@ class Handler_Public extends Handler {
 	}
 
 	function getUnread() {
-		$login = db_escape_string($_REQUEST["login"]);
+		$login = db_escape_string($this->link, $_REQUEST["login"]);
 		$fresh = $_REQUEST["fresh"] == "1";
 
 		$result = db_query($this->link, "SELECT id FROM ttrss_users WHERE login = '$login'");
@@ -202,7 +204,7 @@ class Handler_Public extends Handler {
 	}
 
 	function getProfiles() {
-		$login = db_escape_string($_REQUEST["login"]);
+		$login = db_escape_string($this->link, $_REQUEST["login"]);
 
 		$result = db_query($this->link, "SELECT * FROM ttrss_settings_profiles,ttrss_users
 			WHERE ttrss_users.id = ttrss_settings_profiles.owner_uid AND login = '$login' ORDER BY title");
@@ -222,9 +224,9 @@ class Handler_Public extends Handler {
 	}
 
 	function pubsub() {
-		$mode = db_escape_string($_REQUEST['hub_mode']);
-		$feed_id = (int) db_escape_string($_REQUEST['id']);
-		$feed_url = db_escape_string($_REQUEST['hub_topic']);
+		$mode = db_escape_string($this->link, $_REQUEST['hub_mode']);
+		$feed_id = (int) db_escape_string($this->link, $_REQUEST['id']);
+		$feed_url = db_escape_string($this->link, $_REQUEST['hub_topic']);
 
 		if (!PUBSUBHUBBUB_ENABLED) {
 			header('HTTP/1.0 404 Not Found');
@@ -285,7 +287,7 @@ class Handler_Public extends Handler {
 	}
 
 	function share() {
-		$uuid = db_escape_string($_REQUEST["key"]);
+		$uuid = db_escape_string($this->link, $_REQUEST["key"]);
 
 		$result = db_query($this->link, "SELECT ref_id, owner_uid FROM ttrss_user_entries WHERE
 			uuid = '$uuid'");
@@ -307,18 +309,17 @@ class Handler_Public extends Handler {
 	}
 
 	function rss() {
-		$feed = db_escape_string($_REQUEST["id"]);
-		$key = db_escape_string($_REQUEST["key"]);
+		$feed = db_escape_string($this->link, $_REQUEST["id"]);
+		$key = db_escape_string($this->link, $_REQUEST["key"]);
 		$is_cat = $_REQUEST["is_cat"] != false;
-		$limit = (int)db_escape_string($_REQUEST["limit"]);
-		$offset = (int)db_escape_string($_REQUEST["offset"]);
+		$limit = (int)db_escape_string($this->link, $_REQUEST["limit"]);
+		$offset = (int)db_escape_string($this->link, $_REQUEST["offset"]);
 
-		$search = db_escape_string($_REQUEST["q"]);
-		$match_on = db_escape_string($_REQUEST["m"]);
-		$search_mode = db_escape_string($_REQUEST["smode"]);
-		$view_mode = db_escape_string($_REQUEST["view-mode"]);
+		$search = db_escape_string($this->link, $_REQUEST["q"]);
+		$search_mode = db_escape_string($this->link, $_REQUEST["smode"]);
+		$view_mode = db_escape_string($this->link, $_REQUEST["view-mode"]);
 
-		$format = db_escape_string($_REQUEST['format']);
+		$format = db_escape_string($this->link, $_REQUEST['format']);
 
 		if (!$format) $format = 'atom';
 
@@ -338,7 +339,7 @@ class Handler_Public extends Handler {
 
 		if ($owner_id) {
 			$this->generate_syndicated_feed($owner_id, $feed, $is_cat, $limit,
-				$offset, $search, $search_mode, $match_on, $view_mode, $format);
+				$offset, $search, $search_mode, $view_mode, $format);
 		} else {
 			header('HTTP/1.1 403 Forbidden');
 		}
@@ -372,10 +373,10 @@ class Handler_Public extends Handler {
 
 			if ($action == 'share') {
 
-				$title = db_escape_string(strip_tags($_REQUEST["title"]));
-				$url = db_escape_string(strip_tags($_REQUEST["url"]));
-				$content = db_escape_string(strip_tags($_REQUEST["content"]));
-				$labels = db_escape_string(strip_tags($_REQUEST["labels"]));
+				$title = db_escape_string($this->link, strip_tags($_REQUEST["title"]));
+				$url = db_escape_string($this->link, strip_tags($_REQUEST["url"]));
+				$content = db_escape_string($this->link, strip_tags($_REQUEST["content"]));
+				$labels = db_escape_string($this->link, strip_tags($_REQUEST["labels"]));
 
 				Article::create_published_article($this->link, $title, $url, $content, $labels,
 					$_SESSION["uid"]);
@@ -484,7 +485,7 @@ class Handler_Public extends Handler {
 
 		if (!SINGLE_USER_MODE) {
 
-			$login = db_escape_string($_POST["login"]);
+			$login = db_escape_string($this->link, $_POST["login"]);
 			$password = $_POST["password"];
 			$remember_me = $_POST["remember_me"];
 
@@ -497,7 +498,7 @@ class Handler_Public extends Handler {
 
 				if ($_POST["profile"]) {
 
-					$profile = db_escape_string($_POST["profile"]);
+					$profile = db_escape_string($this->link, $_POST["profile"]);
 
 					$result = db_query($this->link, "SELECT id FROM ttrss_settings_profiles
 						WHERE id = '$profile' AND owner_uid = " . $_SESSION["uid"]);
@@ -526,7 +527,7 @@ class Handler_Public extends Handler {
 
 		if ($_SESSION["uid"]) {
 
-			$feed_url = db_escape_string(trim($_REQUEST["feed_url"]));
+			$feed_url = db_escape_string($this->link, trim($_REQUEST["feed_url"]));
 
 			header('Content-Type: text/html; charset=utf-8');
 			print "<html>
@@ -619,14 +620,14 @@ class Handler_Public extends Handler {
 	}
 
 	function subscribe2() {
-		$feed_url = db_escape_string(trim($_REQUEST["feed_url"]));
-		$cat_id = db_escape_string($_REQUEST["cat_id"]);
-		$from = db_escape_string($_REQUEST["from"]);
+		$feed_url = db_escape_string($this->link, trim($_REQUEST["feed_url"]));
+		$cat_id = db_escape_string($this->link, $_REQUEST["cat_id"]);
+		$from = db_escape_string($this->link, $_REQUEST["from"]);
 
 		/* only read authentication information from POST */
 
-		$auth_login = db_escape_string(trim($_POST["auth_login"]));
-		$auth_pass = db_escape_string(trim($_POST["auth_pass"]));
+		$auth_login = db_escape_string($this->link, trim($_POST["auth_login"]));
+		$auth_pass = db_escape_string($this->link, trim($_POST["auth_pass"]));
 
 		$rc = subscribe_to_feed($this->link, $feed_url, $cat_id, $auth_login, $auth_pass);
 
@@ -705,6 +706,93 @@ class Handler_Public extends Handler {
 	function index() {
 		header("Content-Type: text/plain");
 		print json_encode(array("error" => array("code" => 7)));
+	}
+
+	function forgotpass() {
+		header('Content-Type: text/html; charset=utf-8');
+		print "<html>
+				<head>
+					<title>Tiny Tiny RSS</title>
+					<link rel=\"stylesheet\" type=\"text/css\" href=\"utility.css\">
+					<script type=\"text/javascript\" src=\"lib/prototype.js\"></script>
+					<script type=\"text/javascript\" src=\"lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls\"></script>
+					<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
+				</head>
+				<body id='forgotpass'>";
+
+		print '<div class="floatingLogo"><img src="images/logo_wide.png"></div>';
+		print "<h1>".__("Reset password")."</h1>";
+
+		@$method = $_POST['method'];
+
+		if (!$method) {
+			$secretkey = uniqid();
+			$_SESSION["secretkey"] = $secretkey;
+
+			print "<form method='POST' action='public.php'>";
+			print "<input type='hidden' name='secretkey' value='$secretkey'>";
+			print "<input type='hidden' name='method' value='do'>";
+			print "<input type='hidden' name='op' value='forgotpass'>";
+
+			print "<fieldset>";
+			print "<label>".__("Login:")."</label>";
+			print "<input type='text' name='login' value='' required>";
+			print "</fieldset>";
+
+			print "<fieldset>";
+			print "<label>".__("Email:")."</label>";
+			print "<input type='email' name='email' value='' required>";
+			print "</fieldset>";
+
+			print "<fieldset>";
+			print "<label>".__("How much is two plus two:")."</label>";
+			print "<input type='text' name='test' value='' required>";
+			print "</fieldset>";
+
+			print "<p/>";
+			print "<button type='submit'>".__("Reset password")."</button>";
+
+			print "</form>";
+		} else if ($method == 'do') {
+
+			$secretkey = $_POST["secretkey"];
+			$login = db_escape_string($this->link, $_POST["login"]);
+			$email = db_escape_string($this->link, $_POST["email"]);
+			$test = db_escape_string($this->link, $_POST["test"]);
+
+			if (($test != 4 && $test != 'four') || !$email || !$login) {
+				print_error(__('Some of the required form parameters are missing or incorrect.'));
+
+				print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
+
+			} else if ($_SESSION["secretkey"] == $secretkey) {
+
+				$result = db_query($this->link, "SELECT id FROM ttrss_users
+					WHERE login = '$login' AND email = '$email'");
+
+				if (db_num_rows($result) != 0) {
+					$id = db_fetch_result($result, 0, "id");
+
+					Pref_Users::resetUserPassword($this->link, $id, false);
+
+					print "<p>".__("Completed.")."</p>";
+
+				} else {
+					print_error(__("Sorry, login and email combination not found."));
+					print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
+				}
+
+			} else {
+				print_error(__("Form secret key incorrect. Please enable cookies and try again."));
+				print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
+
+			}
+
+		}
+
+		print "</body>";
+		print "</html>";
+
 	}
 
 }

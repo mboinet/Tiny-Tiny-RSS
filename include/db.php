@@ -41,13 +41,13 @@ function db_connect($host, $user, $pass, $db) {
 	}
 }
 
-function db_escape_string($s, $strip_tags = true) {
+function db_escape_string($link, $s, $strip_tags = true) {
 	if ($strip_tags) $s = strip_tags($s);
 
 	if (DB_TYPE == "pgsql") {
-		return pg_escape_string($s);
+		return pg_escape_string($link, $s);
 	} else {
-		return mysql_real_escape_string($s);
+		return mysql_real_escape_string($s, $link);
 	}
 }
 

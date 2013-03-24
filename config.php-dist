@@ -128,6 +128,8 @@
 	define('SESSION_COOKIE_LIFETIME', 86400*30);
 	// Default lifetime of a session (e.g. login) cookie. In seconds, 
 	// 0 means cookie will be deleted when browser closes.
+	// Setting this to zero will affect several user preferences
+	// like widescreen mode not saving.
 
 	define('SESSION_EXPIRE_TIME', 86400*30);
 	// Hard expiration limit for sessions. Should be
@@ -154,6 +156,9 @@
 
 	define('SMTP_HOST', '');
 	// SMTP Host to send outgoing mail. Blank - use system MTA.
+	
+	define('SMTP_PORT','');
+	// SMTP port to sent outgoing mail. Default is 25.
 
 	define('SMTP_LOGIN', '');
 	define('SMTP_PASSWORD', '');

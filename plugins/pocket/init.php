@@ -24,7 +24,7 @@ class Pocket extends Plugin {
 	function hook_article_button($line) {
 		$article_id = $line["id"];
 
-		$rv = "<img src=\"".theme_image($this->link, 'plugins/pocket/pocket.png')."\"
+		$rv = "<img src=\"plugins/pocket/pocket.png\"
 			class='tagsPic' style=\"cursor : pointer\"
 			onclick=\"shareArticleToPocket($article_id)\"
 			title='".__('Pocket')."'>";
@@ -33,7 +33,7 @@ class Pocket extends Plugin {
 	}
 
 	function getInfo() {
-		$id = db_escape_string($_REQUEST['id']);
+		$id = db_escape_string($this->link, $_REQUEST['id']);
 
 		$result = db_query($this->link, "SELECT title, link
 				FROM ttrss_entries, ttrss_user_entries

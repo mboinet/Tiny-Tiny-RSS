@@ -53,7 +53,7 @@
 
 		$expire = time() + $session_expire;
 
-		$data = db_escape_string(base64_encode($data), $session_connection);
+		$data = db_escape_string($session_connection, base64_encode($data), false);
 
 		if ($session_read) {
 		 	$query = "UPDATE ttrss_sessions SET data='$data',
@@ -71,7 +71,7 @@
 
 		global $session_connection;
 
-		db_close($session_connection);
+		//db_close($session_connection);
 
 		return true;
 	}
@@ -96,7 +96,7 @@
 		db_query($session_connection, $query);
 	}
 
-	if (!SINGLE_USER_MODE && DB_TYPE == "pgsql") {
+	if (!SINGLE_USER_MODE /* && DB_TYPE == "pgsql" */) {
 		session_set_save_handler("ttrss_open",
 			"ttrss_close", "ttrss_read", "ttrss_write",
 			"ttrss_destroy", "ttrss_gc");

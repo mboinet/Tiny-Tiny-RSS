@@ -15,8 +15,6 @@
 
 	login_sequence($link);
 
-	$dt_add = time();
-
 	no_cache_incantation();
 
 	header('Content-Type: text/html; charset=utf-8');
@@ -26,41 +24,42 @@
 <html>
 <head>
 	<title>Tiny Tiny RSS : <?php echo __("Preferences") ?></title>
-	<link rel="stylesheet" type="text/css" href="lib/dijit/themes/claro/claro.css"/>
-	<link rel="stylesheet" type="text/css" href="tt-rss.css?<?php echo $dt_add ?>"/>
+
+	<?php echo stylesheet_tag("lib/dijit/themes/claro/claro.css"); ?>
+	<?php echo stylesheet_tag("tt-rss.css"); ?>
 
 	<?php print_user_stylesheet($link) ?>
 
 	<link rel="shortcut icon" type="image/png" href="images/favicon.png"/>
+	<link rel="icon" type="image/png" sizes="72x72" href="images/favicon-72px.png" />
 
-	<script type="text/javascript" src="lib/prototype.js"></script>
-	<script type="text/javascript" src="lib/position.js"></script>
-	<script type="text/javascript" src="lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls"></script>
-	<script type="text/javascript" src="lib/dojo/dojo.js"></script>
-	<script type="text/javascript" src="lib/dijit/dijit.js"></script>
-	<script type="text/javascript" src="lib/dojo/tt-rss-layer.js"></script>
+	<?php
+	foreach (array("lib/prototype.js",
+				"lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls",
+				"lib/dojo/dojo.js",
+				"lib/dijit/dijit.js",
+				"lib/dojo/tt-rss-layer.js",
+				"localized_js.php",
+				"errors.php?mode=js") as $jsfile) {
 
-	<script type="text/javascript" charset="utf-8" src="localized_js.php?<?php echo $dt_add ?>"></script>
+		echo javascript_tag($jsfile);
+
+	} ?>
 
 	<script type="text/javascript">
 	<?php
-		require 'lib/jsmin.php';
+		require 'lib/jshrink/Minifier.php';
 
 		global $pluginhost;
 
 		foreach ($pluginhost->get_plugins() as $n => $p) {
 			if (method_exists($p, "get_prefs_js")) {
-				echo JSMin::minify($p->get_prefs_js());
+				echo JShrink\Minifier::minify($p->get_prefs_js());
 			}
 		}
 
-		foreach (array("functions", "deprecated", "prefs") as $js) {
-			if (!isset($_GET['debug'])) {
-				echo JSMin::minify(file_get_contents("js/$js.js"));
-			} else {
-				echo file_get_contents("js/$js.js");
-			}
-		}
+		print get_minified_js(array("functions", "deprecated", "prefs"));
+
 	?>
 	</script>
 
