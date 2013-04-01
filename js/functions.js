@@ -2,6 +2,7 @@ var notify_silent = false;
 var loading_progress = 0;
 var sanity_check_done = false;
 var init_params = {};
+var _label_base_index = -1024;
 
 Ajax.Base.prototype.initialize = Ajax.Base.prototype.initialize.wrap(
 	function (callOriginal, options) {
@@ -193,29 +194,28 @@ function notify_real(msg, no_hide, n_type) {
 
 	*/
 
-	if (typeof __ != 'undefined') {
-		msg = __(msg);
-	}
+	msg = __(msg);
 
 	if (n_type == 1) {
 		n.className = "notify";
 	} else if (n_type == 2) {
-		n.className = "notifyProgress";
+		n.className = "notify progress";
 		msg = "<img src='images/indicator_white.gif'> " + msg;
 	} else if (n_type == 3) {
-		n.className = "notifyError";
+		n.className = "notify error";
 		msg = "<img src='images/sign_excl.svg'> " + msg;
 	} else if (n_type == 4) {
-		n.className = "notifyInfo";
+		n.className = "notify info";
 		msg = "<img src='images/sign_info.svg'> " + msg;
 	}
 
-//	msg = "<img src='images/live_com_loading.gif'> " + msg;
-
 	if (no_hide) {
-		msg += " (<a href='#' onclick=\"notify('')\">X</a>)";
+		msg += " <span>(<a href='#' onclick=\"notify('')\">" +
+			__("close") + "</a>)</span>";
 	}
 
+
+//	msg = "<img src='images/live_com_loading.gif'> " + msg;
 
 	nb.innerHTML = msg;
 
@@ -415,7 +415,7 @@ function closeInfoBox(cleanup) {
 }
 
 
-function displayDlg(id, param, callback) {
+function displayDlg(title, id, param, callback) {
 
 	notify_progress("Loading, please wait...", true);
 
@@ -425,14 +425,14 @@ function displayDlg(id, param, callback) {
 	new Ajax.Request("backend.php", {
 		parameters: query,
 		onComplete: function (transport) {
-			infobox_callback2(transport);
+			infobox_callback2(transport, title);
 			if (callback) callback(transport);
 		} });
 
 	return false;
 }
 
-function infobox_callback2(transport) {
+function infobox_callback2(transport, title) {
 	try {
 		var dialog = false;
 
@@ -443,13 +443,7 @@ function infobox_callback2(transport) {
 		//console.log("infobox_callback2");
 		notify('');
 
-		var title = transport.responseXML.getElementsByTagName("title")[0];
-		if (title)
-			title = title.firstChild.nodeValue;
-
-		var content = transport.responseXML.getElementsByTagName("content")[0];
-
-		content = content.firstChild.nodeValue;
+		var content = transport.responseText;
 
 		if (!dialog) {
 			dialog = new dijit.Dialog({
@@ -639,7 +633,7 @@ function filterDlgCheckDate() {
 }
 
 function explainError(code) {
-	return displayDlg("explainError", code);
+	return displayDlg(__("Error explained"), "explainError", code);
 }
 
 function loading_set_progress(p) {
@@ -716,15 +710,6 @@ function hotkey_prefix_timeout() {
 		exception_error("hotkey_prefix_timeout", e);
 	}
 }
-
-function hideAuxDlg() {
-	try {
-		Element.hide('auxDlg');
-	} catch (e) {
-		exception_error("hideAuxDlg", e);
-	}
-}
-
 
 function uploadIconHandler(rc) {
 	try {
@@ -845,7 +830,7 @@ function addLabel(select, callback) {
 
 function quickAddFeed() {
 	try {
-		var query = "backend.php?op=dlg&method=quickAddFeed";
+		var query = "backend.php?op=feeds&method=quickAddFeed";
 
 		// overlapping widgets
 		if (dijit.byId("batchSubDlg")) dijit.byId("batchSubDlg").destroyRecursive();
@@ -1338,6 +1323,8 @@ function backend_sanity_check_callback(transport) {
 				for (k in params) {
 					var v = params[k];
 					console.log("IP: " + k + " => " + v);
+
+					if (k == "label_base_index") _label_base_index = parseInt(v);
 				}
 			}
 
@@ -1648,7 +1635,7 @@ function editFeed(feed, event) {
 
 function feedBrowser() {
 	try {
-		var query = "backend.php?op=dlg&method=feedBrowser";
+		var query = "backend.php?op=feeds&method=feedBrowser";
 
 		if (dijit.byId("feedAddDlg"))
 			dijit.byId("feedAddDlg").hide();
@@ -1986,3 +1973,13 @@ function htmlspecialchars_decode (string, quote_style) {
 
   return string;
 }
+
+
+function label_to_feed_id(label) {
+	return _label_base_index - 1 - Math.abs(label);
+}
+
+function feed_to_label_id(feed) {
+	return _label_base_index - 1 + Math.abs(feed);
+}
+

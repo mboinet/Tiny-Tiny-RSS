@@ -1,6 +1,16 @@
 <?php
+	if (file_exists("install") && !file_exists("config.php")) {
+		header("Location: install/");
+	}
+
 	set_include_path(dirname(__FILE__) ."/include" . PATH_SEPARATOR .
 		get_include_path());
+
+	if (!file_exists("config.php")) {
+		print "<b>Fatal Error</b>: You forgot to copy
+		<b>config.php-dist</b> to <b>config.php</b> and edit it.\n";
+		exit;
+	}
 
 	require_once "sessions.php";
 	require_once "functions.php";
@@ -27,6 +37,15 @@
 
 	<?php echo stylesheet_tag("lib/dijit/themes/claro/claro.css"); ?>
 	<?php echo stylesheet_tag("tt-rss.css"); ?>
+	<?php echo stylesheet_tag("prefs.css"); ?>
+
+	<?php if ($_SESSION["uid"]) {
+		$theme = get_pref($link, "USER_CSS_THEME", $_SESSION["uid"], false);
+		if ($theme) {
+			echo stylesheet_tag("themes/$theme");
+		}
+	}
+	?>
 
 	<?php print_user_stylesheet($link) ?>
 
@@ -38,8 +57,8 @@
 				"lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls",
 				"lib/dojo/dojo.js",
 				"lib/dijit/dijit.js",
+				"lib/CheckBoxTree.js",
 				"lib/dojo/tt-rss-layer.js",
-				"localized_js.php",
 				"errors.php?mode=js") as $jsfile) {
 
 		echo javascript_tag($jsfile);
@@ -58,8 +77,9 @@
 			}
 		}
 
-		print get_minified_js(array("functions", "deprecated", "prefs"));
+		print get_minified_js(array("functions", "deprecated", "prefs", "PrefFeedTree", "PrefFilterTree", "PrefLabelTree"));
 
+		init_js_translations();
 	?>
 	</script>
 
@@ -87,8 +107,6 @@
 		<noscript><br/><?php print_error('Javascript is disabled. Please enable it.') ?></noscript>
 	</div>
 </div>
-
-<img id="piggie" src="images/piggie.png" style="display : none" alt="piggie"/>
 
 <div id="header" dojoType="dijit.layout.ContentPane" region="top">
 	<!-- <a href='#' onclick="showHelp()"><?php echo __("Keyboard shortcuts") ?></a> | -->
@@ -123,7 +141,11 @@
 
 <div id="footer" dojoType="dijit.layout.ContentPane" region="bottom">
 	<a class="insensitive" target="_blank" href="http://tt-rss.org/">
-	Tiny Tiny RSS</a> &copy; 2005-<?php echo date('Y') ?>
+	Tiny Tiny RSS</a>
+	<?php if (!defined('HIDE_VERSION')) { ?>
+		 v<?php echo VERSION ?>
+	<?php } ?>
+	&copy; 2005-<?php echo date('Y') ?>
 	<a class="insensitive" target="_blank"
 	href="http://fakecake.org/">Andrew Dolgov</a>
 </div> <!-- footer -->

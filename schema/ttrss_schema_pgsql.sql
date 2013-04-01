@@ -10,7 +10,6 @@ drop table if exists ttrss_labels;
 drop table if exists ttrss_filters2_rules;
 drop table if exists ttrss_filters2_actions;
 drop table if exists ttrss_filters2;
-drop table if exists ttrss_filters;
 drop table if exists ttrss_filter_types;
 drop table if exists ttrss_filter_actions;
 drop table if exists ttrss_user_prefs;
@@ -57,6 +56,7 @@ create table ttrss_feed_categories(id serial not null primary key,
 	owner_uid integer not null references ttrss_users(id) on delete cascade,
 	collapsed boolean not null default false,
 	order_id integer not null default 0,
+	view_settings varchar(250) not null default '',
 	parent_cat integer references ttrss_feed_categories(id) on delete set null,
 	title varchar(200) not null);
 
@@ -89,6 +89,7 @@ create table ttrss_feeds (id serial not null primary key,
 	mark_unread_on_update boolean not null default false,
 	update_on_checksum_change boolean not null default false,
 	strip_images boolean not null default false,
+	view_settings varchar(250) not null default '',
 	pubsub_state integer not null default 0,
 	favicon_last_checked timestamp default null,
 	auth_pass_encrypted boolean not null default false);
@@ -220,27 +221,21 @@ insert into ttrss_filter_actions (id,name,description) values (6, 'score',
 insert into ttrss_filter_actions (id,name,description) values (7, 'label',
 	'Assign label');
 
-create table ttrss_filters (id serial not null primary key,
-	owner_uid integer not null references ttrss_users(id) on delete cascade,
-	feed_id integer references ttrss_feeds(id) on delete cascade default null,
-	filter_type integer not null references ttrss_filter_types(id),
-	reg_exp varchar(250) not null,
-	filter_param varchar(250) not null default '',
-	enabled boolean not null default true,
-	inverse boolean not null default false,
-	cat_filter boolean not null default false,
-	cat_id integer references ttrss_feed_categories(id) on delete cascade default null,
-	action_id integer not null default 1 references ttrss_filter_actions(id) on delete cascade,
-	action_param varchar(250) not null default '');
+insert into ttrss_filter_actions (id,name,description) values (8, 'stop',
+	'Stop / Do nothing');
 
 create table ttrss_filters2(id serial not null primary key,
 	owner_uid integer not null references ttrss_users(id) on delete cascade,
 	match_any_rule boolean not null default false,
+	inverse boolean not null default false,
+	title varchar(250) not null default '',
+	order_id integer not null default 0,
 	enabled boolean not null default true);
 
 create table ttrss_filters2_rules(id serial not null primary key,
 	filter_id integer not null references ttrss_filters2(id) on delete cascade,
 	reg_exp varchar(250) not null,
+	inverse boolean not null default false,
 	filter_type integer not null references ttrss_filter_types(id),
 	feed_id integer references ttrss_feeds(id) on delete cascade default null,
 	cat_id integer references ttrss_feed_categories(id) on delete cascade default null,
@@ -261,7 +256,7 @@ create index ttrss_tags_post_int_id_idx on ttrss_tags(post_int_id);
 
 create table ttrss_version (schema_version int not null);
 
-insert into ttrss_version values (106);
+insert into ttrss_version values (114);
 
 create table ttrss_enclosures (id serial not null primary key,
 	content_url text not null,
@@ -317,9 +312,9 @@ insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) valu
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('SHORT_DATE_FORMAT', 2, 'M d, G:i', 'Short date format',3);
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('LONG_DATE_FORMAT', 2, 'D, M d Y - G:i', 'Long date format',3);
 
-insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('COMBINED_DISPLAY_MODE', 1, 'false', 'Combined feed display',2, 'Display expanded list of feed articles, instead of separate displays for headlines and article content');
+insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('COMBINED_DISPLAY_MODE', 1, 'true', 'Combined feed display',2, 'Display expanded list of feed articles, instead of separate displays for headlines and article content');
 
-insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('HIDE_READ_FEEDS', 1, 'false', 'Hide feeds with no unread messages',2);
+insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('HIDE_READ_FEEDS', 1, 'false', 'Hide feeds with no unread articles',2);
 
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('ON_CATCHUP_SHOW_NEXT_FEED', 1, 'false', 'On catchup show next feed',2, 'Automatically open next feed with unread articles after marking one as read');
 
@@ -383,7 +378,7 @@ insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) valu
 
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('USER_STYLESHEET', 2, '', 'Customize stylesheet', 2, 'Customize CSS stylesheet to your liking');
 
-insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('SORT_HEADLINES_BY_FEED_DATE', 1, 'true', 'Sort headlines by feed date',2, 'Use feed-specified date to sort headlines instead of local import date.');
+insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('SORT_HEADLINES_BY_FEED_DATE', 1, 'false', 'Sort headlines by feed date',2, 'Use feed-specified date to sort headlines instead of local import date.');
 
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('_MOBILE_BROWSE_CATS', 1, 'true', '', 1);
 
@@ -400,6 +395,8 @@ insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) valu
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('_ENABLED_PLUGINS', 2, '', '', 1);
 
 insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id) values('_MOBILE_REVERSE_HEADLINES', 1, 'false', '', 1);
+
+insert into ttrss_prefs (pref_name,type_id,def_value,short_desc,section_id,help_text) values('USER_CSS_THEME', 2, '', 'Select theme', 2, 'Select one of the available CSS themes');
 
 update ttrss_prefs set access_level = 1 where pref_name in ('ON_CATCHUP_SHOW_NEXT_FEED',
 	'SORT_HEADLINES_BY_FEED_DATE',

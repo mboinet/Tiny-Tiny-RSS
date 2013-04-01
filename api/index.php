@@ -17,6 +17,8 @@
 	require_once "functions.php";
 	require_once "sessions.php";
 
+	ini_set("session.gc_maxlifetime", 86400);
+
 	define('AUTH_DISABLE_OTP', true);
 
 	if (defined('ENABLE_GZIP_OUTPUT') && ENABLE_GZIP_OUTPUT &&
@@ -46,9 +48,10 @@
 
 	if ($_REQUEST["sid"]) {
 		session_id($_REQUEST["sid"]);
+		@session_start();
+	} else if (defined('_API_DEBUG_HTTP_ENABLED')) {
+		@session_start();
 	}
-
-	@session_start();
 
 	if (!init_connection($link)) return;
 

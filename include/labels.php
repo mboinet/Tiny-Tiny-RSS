@@ -158,17 +158,10 @@
 
 			/* Remove access key for the label */
 
-			$ext_id = -11 - $id;
+			$ext_id = LABEL_BASE_INDEX - 1 - $id;
 
 			db_query($link, "DELETE FROM ttrss_access_keys WHERE
 				feed_id = '$ext_id' AND owner_uid = $owner_uid");
-
-			/* Disable filters that reference label being removed */
-
-			db_query($link, "UPDATE ttrss_filters SET
-				enabled = false WHERE action_param = '$caption'
-					AND action_id = 7
-					AND owner_uid = " . $owner_uid);
 
 			/* Remove cached data */
 

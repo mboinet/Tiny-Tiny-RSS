@@ -77,6 +77,7 @@
 		if (DB_TYPE == "pgsql") {
 			$update_limit_qpart = "AND ((
 					ttrss_feeds.update_interval = 0
+					AND ttrss_user_prefs.value != '-1'
 					AND ttrss_feeds.last_updated < NOW() - CAST((ttrss_user_prefs.value || ' minutes') AS INTERVAL)
 				) OR (
 					ttrss_feeds.update_interval > 0
@@ -86,6 +87,7 @@
 		} else {
 			$update_limit_qpart = "AND ((
 					ttrss_feeds.update_interval = 0
+					AND ttrss_user_prefs.value != '-1'
 					AND ttrss_feeds.last_updated < DATE_SUB(NOW(), INTERVAL CONVERT(ttrss_user_prefs.value, SIGNED INTEGER) MINUTE)
 				) OR (
 					ttrss_feeds.update_interval > 0
@@ -108,9 +110,7 @@
 		$random_qpart = sql_random_function();
 
 		// We search for feed needing update.
-		$result = db_query($link, "SELECT ttrss_feeds.feed_url,ttrss_feeds.id, ttrss_feeds.owner_uid,
-				".SUBSTRING_FOR_DATE."(ttrss_feeds.last_updated,1,19) AS last_updated,
-				ttrss_feeds.update_interval
+		$result = db_query($link, "SELECT DISTINCT ttrss_feeds.feed_url,$random_qpart
 			FROM
 				ttrss_feeds, ttrss_users, ttrss_user_prefs
 			WHERE
@@ -118,45 +118,73 @@
 				AND ttrss_users.id = ttrss_user_prefs.owner_uid
 				AND ttrss_user_prefs.pref_name = 'DEFAULT_UPDATE_INTERVAL'
 				$login_thresh_qpart $update_limit_qpart
-			 $updstart_thresh_qpart
+				$updstart_thresh_qpart
 			ORDER BY $random_qpart $query_limit");
 
 		$user_prefs_cache = array();
 
-		if($debug) _debug(sprintf("Scheduled %d feeds to update...\n", db_num_rows($result)));
+		if($debug) _debug(sprintf("Scheduled %d feeds to update...", db_num_rows($result)));
 
 		// Here is a little cache magic in order to minimize risk of double feed updates.
 		$feeds_to_update = array();
 		while ($line = db_fetch_assoc($result)) {
-			$feeds_to_update[$line['id']] = $line;
+			array_push($feeds_to_update, db_escape_string($link, $line['feed_url']));
 		}
 
 		// We update the feed last update started date before anything else.
 		// There is no lag due to feed contents downloads
 		// It prevent an other process to update the same feed.
-		$feed_ids = array_keys($feeds_to_update);
-		if($feed_ids) {
+
+		if(count($feeds_to_update) > 0) {
+			$feeds_quoted = array();
+
+			foreach ($feeds_to_update as $feed) {
+				array_push($feeds_quoted, "'" . db_escape_string($link, $feed) . "'");
+			}
+
 			db_query($link, sprintf("UPDATE ttrss_feeds SET last_update_started = NOW()
-				WHERE id IN (%s)", implode(',', $feed_ids)));
+				WHERE feed_url IN (%s)", implode(',', $feeds_quoted)));
 		}
 
 		expire_cached_files($debug);
 		expire_lock_files($debug);
 
+		$nf = 0;
+
 		// For each feed, we call the feed update function.
-		while ($line = array_pop($feeds_to_update)) {
+		foreach ($feeds_to_update as $feed) {
+			if($debug) _debug("Base feed: $feed");
 
-			if($debug) _debug("Feed: " . $line["feed_url"] . ", " . $line["last_updated"]);
+			//update_rss_feed($link, $line["id"], true);
 
-			update_rss_feed($link, $line["id"], true);
+			// since we have the data cached, we can deal with other feeds with the same url
 
-			sleep(1); // prevent flood (FIXME make this an option?)
+			$tmp_result = db_query($link, "SELECT ttrss_feeds.feed_url,ttrss_feeds.id,last_updated
+			FROM ttrss_feeds, ttrss_users, ttrss_user_prefs WHERE
+				ttrss_user_prefs.owner_uid = ttrss_feeds.owner_uid AND
+				ttrss_users.id = ttrss_user_prefs.owner_uid AND
+				ttrss_user_prefs.pref_name = 'DEFAULT_UPDATE_INTERVAL' AND
+				feed_url = '".db_escape_string($link, $feed)."' AND
+				(ttrss_feeds.update_interval > 0 OR
+					ttrss_user_prefs.value != '-1')
+				$login_thresh_qpart
+			ORDER BY feed_url $query_limit");
+
+			if (db_num_rows($tmp_result) > 0) {
+				while ($tline = db_fetch_assoc($tmp_result)) {
+					if($debug) _debug(" => " . $tline["last_updated"] . ", " . $tline["id"]);
+					update_rss_feed($link, $tline["id"], true);
+					++$nf;
+				}
+			}
 		}
 
 		require_once "digest.php";
 
 		// Send feed digests by email if needed.
 		send_headlines_digests($link, $debug);
+
+		return $nf;
 
 	} // function update_daemon_common
 
@@ -202,49 +230,96 @@
 
 		$feed = db_escape_string($link, $feed);
 
-		/* if ($auth_login && $auth_pass ){
-			$url_parts = array();
-			preg_match("/(^[^:]*):\/\/(.*)/", $fetch_url, $url_parts);
+		if ($override_url) $fetch_url = $override_url;
 
-			if ($url_parts[1] && $url_parts[2]) {
-				$fetch_url = $url_parts[1] . "://$auth_login:$auth_pass@" . $url_parts[2];
-			}
-		} */
+		$date_feed_processed = date('Y-m-d H:i');
 
-		if ($override_url)
-			$fetch_url = $override_url;
-
-		if ($debug_enabled) {
-			_debug("update_rss_feed: fetching [$fetch_url]...");
-		}
+		$cache_filename = CACHE_DIR . "/simplepie/" . sha1($fetch_url) . ".feed";
 
 		// Ignore cache if new feed or manual update.
-		$cache_age = (is_null($last_updated) || $last_updated == '1970-01-01 00:00:00') ?
-			-1 : get_feed_update_interval($link, $feed) * 60;
+		$cache_age = ($no_cache || is_null($last_updated) || $last_updated == '1970-01-01 00:00:00') ?
+			30 : get_feed_update_interval($link, $feed) * 60;
 
-		$simplepie_cache_dir = CACHE_DIR . "/simplepie";
-
-		if (!is_dir($simplepie_cache_dir)) {
-			mkdir($simplepie_cache_dir);
+		if ($debug_enabled) {
+			_debug("update_rss_feed: cache filename: $cache_filename exists: " . file_exists($cache_filename));
+			_debug("update_rss_feed: cache age: $cache_age; no cache: $no_cache");
 		}
 
-		$feed_data = fetch_file_contents($fetch_url, false,
-			$auth_login, $auth_pass, false, $no_cache ? 15 : 45);
+		$cached_feed_data_hash = false;
 
-		if (!$feed_data) {
-			global $fetch_last_error;
+		$rss = false;
+		$rss_hash = false;
+		$cache_timestamp = file_exists($cache_filename) ? filemtime($cache_filename) : 0;
+		$last_updated_timestamp = strtotime($last_updated);
 
-			if ($debug_enabled) {
-				_debug("update_rss_feed: unable to fetch: $fetch_last_error");
+		if (file_exists($cache_filename) &&
+			is_readable($cache_filename) &&
+			!$auth_login && !$auth_pass &&
+			filemtime($cache_filename) > time() - $cache_age) {
+
+				if ($debug_enabled) {
+					_debug("update_rss_feed: using local cache.");
+				}
+
+				if ($cache_timestamp > $last_updated_timestamp) {
+					@$rss_data = file_get_contents($cache_filename);
+
+					if ($rss_data) {
+						$rss_hash = sha1($rss_data);
+						@$rss = unserialize($rss_data);
+					}
+				} else {
+					if ($debug_enabled) {
+						_debug("update_rss_feed: local cache valid and older than last_updated, nothing to do.");
+					}
+					return;
+				}
+		}
+
+		if (!$rss) {
+
+			if (!$feed_data) {
+				if ($debug_enabled) {
+					_debug("update_rss_feed: fetching [$fetch_url] (ts: $cache_timestamp/$last_updated_timestamp)");
+				}
+
+				$force_refetch = isset($_REQUEST["force_refetch"]);
+
+				$feed_data = fetch_file_contents($fetch_url, false,
+					$auth_login, $auth_pass, false, $no_cache ? 15 : 45,
+					$force_refetch ? 0 : max($last_updated_timestamp, $cache_timestamp));
+
+				if ($debug_enabled) {
+					_debug("update_rss_feed: fetch done.");
+				}
+
 			}
 
-			$error_escaped = db_escape_string($link, $fetch_last_error);
+			if (!$feed_data) {
+				global $fetch_last_error;
+				global $fetch_last_error_code;
 
-			db_query($link,
-				"UPDATE ttrss_feeds SET last_error = '$error_escaped',
-					last_updated = NOW() WHERE id = '$feed'");
+				if ($debug_enabled) {
+					_debug("update_rss_feed: unable to fetch: $fetch_last_error [$fetch_last_error_code]");
+				}
 
-			return;
+				$error_escaped = '';
+
+				// If-Modified-Since
+				if ($fetch_last_error_code != 304) {
+					$error_escaped = db_escape_string($link, $fetch_last_error);
+				} else {
+					if ($debug_enabled) {
+						_debug("update_rss_feed: source claims data not modified, nothing to do.");
+					}
+				}
+
+				db_query($link,
+					"UPDATE ttrss_feeds SET last_error = '$error_escaped',
+						last_updated = NOW() WHERE id = '$feed'");
+
+				return;
+			}
 		}
 
 		$pluginhost = new PluginHost($link);
@@ -259,37 +334,37 @@
 			$feed_data = $plugin->hook_feed_fetched($feed_data);
 		}
 
-		if ($debug_enabled) {
-			_debug("update_rss_feed: fetch done, parsing...");
+		if (!$rss) {
+			$rss = new SimplePie();
+			$rss->set_sanitize_class("SanitizeDummy");
+			// simplepie ignores the above and creates default sanitizer anyway,
+			// so let's override it...
+			$rss->sanitize = new SanitizeDummy();
+			$rss->set_output_encoding('UTF-8');
+			$rss->set_raw_data($feed_data);
+			$rss->enable_cache(false);
+
+			@$rss->init();
 		}
-
-		$rss = new SimplePie();
-		$rss->set_sanitize_class("SanitizeDummy");
-		// simplepie ignores the above and creates default sanitizer anyway,
-		// so let's override it...
-		$rss->sanitize = new SanitizeDummy();
-		$rss->set_output_encoding('UTF-8');
-		$rss->set_raw_data($feed_data);
-
-		if ($debug_enabled) {
-			_debug("feed update interval (sec): " .
-				get_feed_update_interval($link, $feed)*60);
-		}
-
-		$rss->enable_cache(!$no_cache);
-
-		if (!$no_cache) {
-			$rss->set_cache_location($simplepie_cache_dir);
-			$rss->set_cache_duration($cache_age);
-		}
-
-		@$rss->init();
 
 //		print_r($rss);
 
 		$feed = db_escape_string($link, $feed);
 
 		if (!$rss->error()) {
+
+			// cache data for later
+			if (!$auth_pass && !$auth_login && is_writable(CACHE_DIR . "/simplepie")) {
+				$rss_data = serialize($rss);
+				$new_rss_hash = sha1($rss_data);
+
+				if ($new_rss_hash != $rss_hash) {
+					if ($debug_enabled) {
+						_debug("update_rss_feed: saving $cache_filename");
+					}
+					@file_put_contents($cache_filename, serialize($rss));
+				}
+			}
 
 			// We use local pluginhost here because we need to load different per-user feed plugins
 			$pluginhost->run_hooks($pluginhost::HOOK_FEED_PARSED, "hook_feed_parsed", $rss);
@@ -435,7 +510,7 @@
 
 				$entry_timestamp = strtotime($item->get_date());
 
-				if ($entry_timestamp == -1 || !$entry_timestamp) {
+				if ($entry_timestamp == -1 || !$entry_timestamp || $entry_timestamp > time()) {
 					$entry_timestamp = time();
 					$no_orig_date = 'true';
 				} else {
@@ -626,7 +701,7 @@
 							'',
 							$no_orig_date,
 							NOW(),
-							NOW(),
+							'$date_feed_processed',
 							'$entry_comments',
 							'$num_comments',
 							'$entry_plugin_data',
@@ -996,7 +1071,7 @@
 					}
 
 					foreach ($labels as $label) {
-						$caption = $label["caption"];
+						$caption = preg_quote($label["caption"]);
 
 						if ($caption && preg_match("/\b$caption\b/i", "$tags_str " . strip_tags($entry_content) . " $entry_title")) {
 							if (!labels_contains_caption($article_labels, $caption)) {
@@ -1165,11 +1240,13 @@
 
 		foreach ($filters as $filter) {
 			$match_any_rule = $filter["match_any_rule"];
+			$inverse = $filter["inverse"];
 			$filter_match = false;
 
 			foreach ($filter["rules"] as $rule) {
 				$match = false;
 				$reg_exp = $rule["reg_exp"];
+				$rule_inverse = $rule["inverse"];
 
 				if (!$reg_exp)
 					continue;
@@ -1202,6 +1279,8 @@
 					break;
 				}
 
+				if ($rule_inverse) $match = !$match;
+
 				if ($match_any_rule) {
 					if ($match) {
 						$filter_match = true;
@@ -1215,9 +1294,14 @@
 				}
 			}
 
+			if ($inverse) $filter_match = !$filter_match;
+
 			if ($filter_match) {
 				foreach ($filter["actions"] AS $action) {
 					array_push($matches, $action);
+
+					// if Stop action encountered, perform no further processing
+					if ($action["type"] == "stop") return $matches;
 				}
 			}
 		}

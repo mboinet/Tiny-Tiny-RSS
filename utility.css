@@ -1,8 +1,22 @@
 body {
-	margin : 2em;
-	padding : 0em;
 	font-family : sans-serif;
 	font-size : 12px;
+	background : #eee;
+	margin-left : auto;
+	margin-right : auto;
+	max-width : 800px;
+}
+
+form {
+	margin : 10px 0px 0px 0px;
+	padding : 0px;
+}
+
+div.content {
+	background : white;
+	border : 1px solid #ccc;
+	padding : 10px;
+	box-shadow : 0px 0px 3px #ccc;
 }
 
 p.warning {
@@ -24,6 +38,8 @@ div.insensitive-small {
 
 .floatingLogo {
 	float : right;
+	position : relative;
+	top : -10px;
 }
 
 a {
@@ -35,52 +51,46 @@ a:hover {
 	color : black;
 }
 
+div.notice, div.warning, div.error {
+	padding : 4px 10px 4px 4px;
+	display : inline-block;
+	margin : 2px 0px 2px 0px;
+	font-size : 12px;
+	box-shadow : 0px 0px 2px #ccc;
+}
+
 div.notice {
-	background : #ffffff;
-	border : 1px solid #88b0f0;
-	width : 50%;
-	padding : 5px;
-	margin : 0px 0px 5px 0px;
-	font-size : 9pt;
+	background : #ecf4ff;
 }
 
 div.warning {
 	background : #fff7d5;
-	border : 1px solid #d7c47a;
-	font-size : 9pt;
-	width : 50%;
-	padding : 5px;
-	margin : 0px 0px 5px 0px;
-}
-
-
-div.warning img, div.notice img, div.error img {
-	vertical-align : middle;
-	padding : 5px;
 }
 
 div.error {
-	border : 1px solid #ff0000;
 	background : #ffcccc;
-	padding : 5px;
-	margin : 0px 0px 5px 0px;
-	font-size : 9pt;
+}
+
+div.warning img, div.notice img, div.error img {
+	margin-right : 4px;
+	float : left;
+	vertical-align : middle;
 }
 
 h1 {
 	color : #88b0f0;
-	font-size : 16pt;
-/*	border-width : 0px 0px 1px 0px;
-	border-color : black;
-	border-style : solid; */
+	font-size : 32px;
+	font-family : serif;
+	margin : 20px 0px 5px 0px;
+	text-shadow : 2px 2px 2px #fff;
 }
 
 h2 {
 	color : #88b0f0;
 	font-size : 14pt;
-/*	border-width : 0px 0px 1px 0px;
-	border-color : black;
-	border-style : solid; */
+	border-width : 0px 0px 1px 0px;
+	border-color : #f0f0f0;
+	border-style : solid; 
 }
 
 div.rss h1 {
@@ -93,7 +103,6 @@ div.rss h1 {
 
 div.rss h2 {
 	font-size : 12pt;
-	margin : 0px;
 }
 
 div.rss a.extlink {
@@ -102,6 +111,10 @@ div.rss a.extlink {
 	border-color : #778899;
 	border-style : dotted;
 	font-size : 9pt;
+}
+
+div.rss img {
+	max-width : 775px;
 }
 
 div.rss p.description {

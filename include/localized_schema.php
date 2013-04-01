@@ -1,4 +1,4 @@
-<?php # This file has been generated at:  Thu Mar 21 23:29:09 MSK 2013
+<?php # This file has been generated at:  Mon Apr 1 21:30:54 MSK 2013
 
 __("Title");
 __("Title or Content");
@@ -30,6 +30,7 @@ __('Customize CSS stylesheet to your liking');
 __('Use feed-specified date to sort headlines instead of local import date.');
 __('Click to register your SSL client certificate with tt-rss');
 __('Uses UTC timezone');
+__('Select one of the available CSS themes');
 __('Purge articles after this number of days (0 - disables)');
 __('Default interval between feed updates');
 __('Amount of articles to display at once');
@@ -39,7 +40,7 @@ __('Show content preview in headlines list');
 __('Short date format');
 __('Long date format');
 __('Combined feed display');
-__('Hide feeds with no unread messages');
+__('Hide feeds with no unread articles');
 __('On catchup show next feed');
 __('Sort feeds by unread articles count');
 __('Reverse headline order (oldest first)');
@@ -62,4 +63,5 @@ __('Sort headlines by feed date');
 __('Login with an SSL certificate');
 __('Try to send digests around specified time');
 __('Assign articles to labels automatically');
+__('Select theme');
 ?>

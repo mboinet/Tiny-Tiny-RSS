@@ -37,7 +37,7 @@
 			"help");
 
 	foreach ($pluginhost->get_commands() as $command => $data) {
-		array_push($longopts, $command);
+		array_push($longopts, $command . $data["suffix"]);
 	}
 
 	$options = getopt("", $longopts);
@@ -51,7 +51,7 @@
 		</head>
 
 		<body>
-		<div class="floatingLogo"><img src="images/logo_wide.png"></div>
+		<div class="floatingLogo"><img src="images/logo_small.png"></div>
 		<h1><?php echo __("Tiny Tiny RSS data update script.") ?></h1>
 
 		<?php print_error("Please run this script from the command line. Use option \"-help\" to display command help if this error is displayed erroneously."); ?>
@@ -79,7 +79,8 @@
 		print "Plugin options:\n";
 
 		foreach ($pluginhost->get_commands() as $command => $data) {
-			printf("  --%-19s - %s\n", "$command", $data["description"]);
+			$args = $data['arghelp'];
+			printf(" --%-19s - %s\n", "$command $args", $data["description"]);
 		}
 
 		return;
@@ -144,7 +145,9 @@
 
 	if (isset($options["daemon"])) {
 		while (true) {
-			passthru(PHP_EXECUTABLE . " " . $argv[0] ." --daemon-loop");
+			$quiet = (isset($options["quiet"])) ? "--quiet" : "";
+
+			passthru(PHP_EXECUTABLE . " " . $argv[0] ." --daemon-loop $quiet");
 			_debug("Sleeping for " . DAEMON_SLEEP_INTERVAL . " seconds...");
 			sleep(DAEMON_SLEEP_INTERVAL);
 		}
@@ -152,7 +155,7 @@
 
 	if (isset($options["daemon-loop"])) {
 		if (!make_stampfile('update_daemon.stamp')) {
-			die("error: unable to create stampfile\n");
+			_debug("warning: unable to create stampfile\n");
 		}
 
 		// Call to the feed batch update function

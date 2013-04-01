@@ -2,7 +2,7 @@
 class Article extends Handler_Protected {
 
 	function csrf_ignore($method) {
-		$csrf_ignored = array("redirect");
+		$csrf_ignored = array("redirect", "editarticletags");
 
 		return array_search($method, $csrf_ignored) !== false;
 	}
@@ -122,14 +122,16 @@ class Article extends Handler_Protected {
 				db_query($link, "UPDATE ttrss_entries SET
 					content = '$content', content_hash = '$content_hash' WHERE id = '$ref_id'");
 
-				db_query($link, "UPDATE ttrss_user_entries SET published = true WHERE
+				db_query($link, "UPDATE ttrss_user_entries SET published = true,
+						last_published = NOW() WHERE
 						int_id = '$int_id' AND owner_uid = '$owner_uid'");
 			} else {
 
 				db_query($link, "INSERT INTO ttrss_user_entries
-					(ref_id, uuid, feed_id, orig_feed_id, owner_uid, published, tag_cache, label_cache, last_read, note, unread)
+					(ref_id, uuid, feed_id, orig_feed_id, owner_uid, published, tag_cache, label_cache,
+						last_read, note, unread, last_published)
 					VALUES
-					('$ref_id', '', NULL, NULL, $owner_uid, true, '', '', NOW(), '', false)");
+					('$ref_id', '', NULL, NULL, $owner_uid, true, '', '', NOW(), '', false, NOW())");
 			}
 
 			if (count($labels) != 0) {
@@ -152,9 +154,10 @@ class Article extends Handler_Protected {
 				$ref_id = db_fetch_result($result, 0, "id");
 
 				db_query($link, "INSERT INTO ttrss_user_entries
-					(ref_id, uuid, feed_id, orig_feed_id, owner_uid, published, tag_cache, label_cache, last_read, note, unread)
+					(ref_id, uuid, feed_id, orig_feed_id, owner_uid, published, tag_cache, label_cache,
+						last_read, note, unread, last_published)
 					VALUES
-					('$ref_id', '', NULL, NULL, $owner_uid, true, '', '', NOW(), '', false)");
+					('$ref_id', '', NULL, NULL, $owner_uid, true, '', '', NOW(), '', false, NOW())");
 
 				if (count($labels) != 0) {
 					foreach ($labels as $label) {
@@ -171,6 +174,39 @@ class Article extends Handler_Protected {
 		return $rc;
 	}
 
+	function editArticleTags() {
+
+		print __("Tags for this article (separated by commas):")."<br>";
+
+		$param = db_escape_string($this->link, $_REQUEST['param']);
+
+		$tags = get_article_tags($this->link, db_escape_string($this->link, $param));
+
+		$tags_str = join(", ", $tags);
+
+		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"id\" value=\"$param\">";
+		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"op\" value=\"rpc\">";
+		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"method\" value=\"setArticleTags\">";
+
+		print "<table width='100%'><tr><td>";
+
+		print "<textarea dojoType=\"dijit.form.SimpleTextarea\" rows='4'
+			style='font-size : 12px; width : 100%' id=\"tags_str\"
+			name='tags_str'>$tags_str</textarea>
+		<div class=\"autocomplete\" id=\"tags_choices\"
+				style=\"display:none\"></div>";
+
+		print "</td></tr></table>";
+
+		print "<div class='dlgButtons'>";
+
+		print "<button dojoType=\"dijit.form.Button\"
+			onclick=\"dijit.byId('editTagsDlg').execute()\">".__('Save')."</button> ";
+		print "<button dojoType=\"dijit.form.Button\"
+			onclick=\"dijit.byId('editTagsDlg').hide()\">".__('Cancel')."</button>";
+		print "</div>";
+
+	}
 
 
 }

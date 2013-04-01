@@ -1,4 +1,8 @@
 <?php
+	if (file_exists("install") && !file_exists("config.php")) {
+		header("Location: install/");
+	}
+
 	if (!file_exists("config.php")) {
 		print "<b>Fatal Error</b>: You forgot to copy
 		<b>config.php-dist</b> to <b>config.php</b> and edit it.\n";
@@ -35,12 +39,14 @@
 		if ($mobile->isTablet() && $pluginhost->get_plugin("digest")) {
 			header('Location: backend.php?op=digest');
 			exit;
-		} else if ($mobile->isMobile()) {
-			header('Location: mobile/index.php');
+		} else if ($mobile->isMobile() && $pluginhost->get_plugin("mobile")) {
+			header('Location: backend.php?op=mobile');
+			exit;
+		} else if ($mobile->isMobile() && $pluginhost->get_plugin("digest")) {
+			header('Location: backend.php?op=digest');
 			exit;
 		}
 	}
-
 
 	login_sequence($link);
 
@@ -58,6 +64,14 @@
 	<?php echo stylesheet_tag("lib/dijit/themes/claro/claro.css"); ?>
 	<?php echo stylesheet_tag("tt-rss.css"); ?>
 	<?php echo stylesheet_tag("cdm.css"); ?>
+
+	<?php if ($_SESSION["uid"]) {
+		$theme = get_pref($link, "USER_CSS_THEME", $_SESSION["uid"], false);
+		if ($theme) {
+			echo stylesheet_tag("themes/$theme");
+		}
+	}
+	?>
 
 	<?php print_user_stylesheet($link) ?>
 
@@ -80,7 +94,6 @@
 				"lib/dojo/dojo.js",
 				"lib/dijit/dijit.js",
 				"lib/dojo/tt-rss-layer.js",
-				"localized_js.php",
 				"errors.php?mode=js") as $jsfile) {
 
 		echo javascript_tag($jsfile);
@@ -102,6 +115,7 @@
 		print get_minified_js(array("tt-rss",
 			"functions", "feedlist", "viewfeed", "FeedTree"));
 
+		init_js_translations();
 	?>
 	</script>
 
@@ -126,21 +140,10 @@
 	</div>
 </div>
 
-<div id="header">
-	<img id="net-alert" style="display : none"
-		title="<?php echo __("Communication problem with server.") ?>"
-		src="images/alert.png"/>
-
-	<img id="newVersionIcon" style="display:none" onclick="newVersionDlg()"
-		width="13" height="13"
-		src="images/new_version.png"
-		title="<?php echo __('New version of Tiny Tiny RSS is available!') ?>"
-		alt="new_version_icon"/>
-</div>
+<div style="display : none" onclick="Element.hide(this)" id="small_article_preview"></div>
 
 <div id="notify" class="notify"><span id="notify_body">&nbsp;</span></div>
 <div id="cmdline" style="display : none"></div>
-<div id="auxDlg" style="display : none"></div>
 <div id="headlines-tmp" style="display : none"></div>
 
 <div id="main" dojoType="dijit.layout.BorderContainer">
@@ -173,29 +176,37 @@
 			<option value="marked"><?php echo __('Starred') ?></option>
 			<option value="published"><?php echo __('Published') ?></option>
 			<option value="unread"><?php echo __('Unread') ?></option>
+			<option value="unread_first"><?php echo __('Unread First') ?></option>
+			<option value="has_note"><?php echo __('With Note') ?></option>
 			<!-- <option value="noscores"><?php echo __('Ignore Scoring') ?></option> -->
-			<option value="updated"><?php echo __('Updated') ?></option>
 		</select>
 
 		<select title="<?php echo __('Sort articles') ?>"
 			onchange="viewModeChanged()"
 			dojoType="dijit.form.Select" name="order_by">
 			<option selected="selected" value="default"><?php echo __('Default') ?></option>
-			<option value="date"><?php echo __('Date') ?></option>
-			<option value="title"><?php echo __('Title') ?></option>
-			<option value="score"><?php echo __('Score') ?></option>
+			<option value="feed_dates"><?php echo __('Newest first') ?></option>
+			<option value="date_reverse"><?php echo __('Oldest first') ?></option>
 		</select>
 
-		<!-- deprecated -->
-		<button dojoType="dijit.form.Button" name="update" style="display : none"
-			onclick="viewCurrentFeed()">
-			<?php echo __('Update') ?></button>
-
-		<button dojoType="dijit.form.Button"
-			onclick="catchupCurrentFeed()">
-			<?php echo __('Mark as read') ?></button>
+		<select title="<?php echo __('Mark feed as read') ?>"
+			onchange="catchupCurrentFeed(event)"
+			dojoType="dijit.form.Select" name="catchup_feed">
+			<option selected="selected" value="default"><?php echo __('Mark as read') ?></option>
+			<option value="all"><?php echo __('All articles') ?></option>
+			<option value="1day"><?php echo __('Older than one day') ?></option>
+			<option value="1week"><?php echo __('Older than one week') ?></option>
+			<option value="2weeks"><?php echo __('Older than two weeks') ?></option>
+		</select>
 
 		</form>
+
+		<?php
+			global $pluginhost;
+			foreach ($pluginhost->get_hooks($pluginhost::HOOK_TOOLBAR_BUTTON) as $p) {
+				 echo $p->hook_toolbar_button();
+			}
+		?>
 
 		<div class="actionChooser">
 
@@ -220,23 +231,28 @@
 					<div dojoType="dijit.MenuItem" disabled="1"><?php echo __('Feed actions:') ?></div>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcAddFeed')"><?php echo __('Subscribe to feed...') ?></div>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcEditFeed')"><?php echo __('Edit this feed...') ?></div>
-					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcRescoreFeed')"><?php echo __('Rescore feed') ?></div>
+					<!-- <div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcRescoreFeed')"><?php echo __('Rescore feed') ?></div> -->
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcRemoveFeed')"><?php echo __('Unsubscribe') ?></div>
 					<div dojoType="dijit.MenuItem" disabled="1"><?php echo __('All feeds:') ?></div>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcCatchupAll')"><?php echo __('Mark as read') ?></div>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcShowOnlyUnread')"><?php echo __('(Un)hide read feeds') ?></div>
 					<div dojoType="dijit.MenuItem" disabled="1"><?php echo __('Other actions:') ?></div>
-					<?php if ($pluginhost->get_plugin("digest")) { ?>
+					<!-- <?php if ($pluginhost->get_plugin("digest")) { ?>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcDigest')"><?php echo __('Switch to digest...') ?></div>
-					<?php } ?>
-						<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcTagCloud')"><?php echo __('Show tag cloud...') ?></div>
-					<?php if (!get_pref($link, 'COMBINED_DISPLAY_MODE')) { ?>
-							<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcToggleWidescreen')"><?php echo __('Toggle widescreen mode') ?></div>
-					<?php } ?>
+					<?php } ?> -->
+						<!-- <div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcTagCloud')"><?php echo __('Show tag cloud...') ?></div> -->
+						<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcToggleWidescreen')"><?php echo __('Toggle widescreen mode') ?></div>
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcTagSelect')"><?php echo __('Select by tags...') ?></div>
-					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcAddLabel')"><?php echo __('Create label...') ?></div>
-					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcAddFilter')"><?php echo __('Create filter...') ?></div>
+					<!-- <div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcAddLabel')"><?php echo __('Create label...') ?></div>
+					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcAddFilter')"><?php echo __('Create filter...') ?></div> -->
 					<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcHKhelp')"><?php echo __('Keyboard shortcuts help') ?></div>
+
+					<?php
+						foreach ($pluginhost->get_hooks($pluginhost::HOOK_ACTION_ITEM) as $p) {
+						 echo $p->hook_action_item();
+						}
+					?>
+
 					<?php if (!$_SESSION["hide_logout"]) { ?>
 						<div dojoType="dijit.MenuItem" onclick="quickMenuGo('qmcLogout')"><?php echo __('Logout') ?></div>
 					<?php } ?>
@@ -258,10 +274,8 @@
 			</div>
 		</div>
 
-		<?php if (!get_pref($link, 'COMBINED_DISPLAY_MODE')) { ?>
 		<div id="content-insert" dojoType="dijit.layout.ContentPane" region="bottom"
 			style="height : 50%" splitter="true"></div>
-		<?php } ?>
 
 	</div>
 </div>

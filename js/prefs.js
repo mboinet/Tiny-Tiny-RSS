@@ -91,7 +91,7 @@ function editUser(id, event) {
 		new Ajax.Request("backend.php",	{
 			parameters: query,
 			onComplete: function(transport) {
-					infobox_callback2(transport);
+					infobox_callback2(transport, __("User Editor"));
 					document.forms['user_edit_form'].login.focus();
 				} });
 
@@ -582,7 +582,7 @@ function selectedUserDetails() {
 		new Ajax.Request("backend.php",	{
 			parameters: query,
 			onComplete: function(transport) {
-					infobox_callback2(transport);
+					infobox_callback2(transport, __("User details"));
 				} });
 	} catch (e) {
 		exception_error("selectedUserDetails", e);
@@ -764,18 +764,6 @@ function editSelectedFeeds() {
 
 	} catch (e) {
 		exception_error("editSelectedFeeds", e);
-	}
-}
-
-function piggie(enable) {
-	if (enable) {
-		console.log("I LOVEDED IT!");
-		var piggie = $("piggie");
-
-		Element.show(piggie);
-		Position.Center(piggie);
-		Effect.Puff(piggie);
-
 	}
 }
 
@@ -1412,7 +1400,7 @@ function editProfiles() {
 		if (dijit.byId("profileEditDlg"))
 			dijit.byId("profileEditDlg").destroyRecursive();
 
-		var query = "backend.php?op=dlg&method=editPrefProfiles";
+		var query = "backend.php?op=pref-prefs&method=editPrefProfiles";
 
 		dialog = new dijit.Dialog({
 			id: "profileEditDlg",
@@ -1563,6 +1551,24 @@ function clearArticleAccessKeys() {
 
 	return false;
 }
+
+function resetFilterOrder() {
+	try {
+		notify_progress("Loading, please wait...");
+
+		new Ajax.Request("backend.php", {
+			parameters: "?op=pref-filters&method=filtersortreset",
+			onComplete: function(transport) {
+		  		updateFilterList();
+			} });
+
+
+	} catch (e) {
+		exception_error("resetFilterOrder");
+	}
+}
+
+
 function resetFeedOrder() {
 	try {
 		notify_progress("Loading, please wait...");
@@ -1706,31 +1712,10 @@ function editLabel(id, event) {
 	}
 }
 
-function clearTwitterCredentials() {
-	try {
-		var ok = confirm(__("This will clear your stored authentication information for Twitter. Continue?"));
-
-		if (ok) {
-			notify_progress("Clearing credentials...");
-
-			var query = "?op=pref-feeds&method=remtwitterinfo";
-
-			new Ajax.Request("backend.php", {
-				parameters: query,
-				onComplete: function(transport) {
-					notify_info("Twitter credentials have been cleared.");
-					updateFeedList();
-				} });
-		}
-
-	} catch (e) {
-		exception_error("clearTwitterCredentials", e);
-	}
-}
 
 function customizeCSS() {
 	try {
-		var query = "backend.php?op=dlg&method=customizeCSS";
+		var query = "backend.php?op=pref-prefs&method=customizeCSS";
 
 		if (dijit.byId("cssEditDlg"))
 			dijit.byId("cssEditDlg").destroyRecursive();
@@ -1774,7 +1759,7 @@ function gotoExportOpml(filename, settings) {
 
 function batchSubscribe() {
 	try {
-		var query = "backend.php?op=dlg&method=batchSubscribe";
+		var query = "backend.php?op=pref-feeds&method=batchSubscribe";
 
 		// overlapping widgets
 		if (dijit.byId("batchSubDlg")) dijit.byId("batchSubDlg").destroyRecursive();

@@ -3,7 +3,8 @@ class Pref_Feeds extends Handler_Protected {
 
 	function csrf_ignore($method) {
 		$csrf_ignored = array("index", "getfeedtree", "add", "editcats", "editfeed",
-			"savefeedorder", "uploadicon", "feedswitherrors", "inactivefeeds");
+			"savefeedorder", "uploadicon", "feedswitherrors", "inactivefeeds",
+			"batchsubscribe");
 
 		return array_search($method, $csrf_ignored) !== false;
 	}
@@ -33,8 +34,10 @@ class Pref_Feeds extends Handler_Protected {
 
 		if ($search) $search_qpart = " AND LOWER(title) LIKE LOWER('%$search%')";
 
-		$show_empty_cats = $_REQUEST['mode'] != 2 && !$search &&
-			get_pref($this->link, '_PREFS_SHOW_EMPTY_CATS');
+		// first one is set by API
+		$show_empty_cats = $_REQUEST['force_show_empty'] ||
+			($_REQUEST['mode'] != 2 && !$search &&
+				get_pref($this->link, '_PREFS_SHOW_EMPTY_CATS'));
 
 		$items = array();
 
@@ -55,7 +58,7 @@ class Pref_Feeds extends Handler_Protected {
 
 			$cat['items'] = $this->get_category_items($line['id']);
 
-			$cat['param'] = T_sprintf('(%d feeds)', count($cat['items']));
+			$cat['param'] = vsprintf(_ngettext('(%d feed)', '(%d feeds)', count($cat['items'])), count($cat['items']));
 
 			if (count($cat['items']) > 0 || $show_empty_cats)
 				array_push($items, $cat);
@@ -87,6 +90,10 @@ class Pref_Feeds extends Handler_Protected {
 	}
 
 	function getfeedtree() {
+		print json_encode($this->makefeedtree());
+	}
+
+	function makefeedtree() {
 
 		if ($_REQUEST['mode'] != 2)
 			$search = $_SESSION["prefs_feed_search"];
@@ -115,6 +122,32 @@ class Pref_Feeds extends Handler_Protected {
 				array_push($cat['items'], $this->feedlist_init_feed($i));
 			}
 
+			/* Plugin feeds for -1 */
+
+			global $pluginhost;
+
+			$feeds = $pluginhost->get_feeds(-1);
+
+			if ($feeds) {
+				foreach ($feeds as $feed) {
+					$feed_id = PluginHost::pfeed_to_feed_id($feed['id']);
+
+					$item = array();
+					$item['id'] = 'FEED:' . $feed_id;
+					$item['bare_id'] = (int)$feed_id;
+					$item['name'] = $feed['title'];
+					$item['checkbox'] = false;
+					$item['error'] = '';
+					$item['icon'] = $feed['icon'];
+
+					$item['param'] = '';
+					$item['unread'] = 0; //$feed['sender']->get_unread($feed['id']);
+					$item['type'] = 'feed';
+
+					array_push($cat['items'], $item);
+				}
+			}
+
 			if ($enable_cats) {
 				array_push($root['items'], $cat);
 			} else {
@@ -134,7 +167,7 @@ class Pref_Feeds extends Handler_Protected {
 
 				while ($line = db_fetch_assoc($result)) {
 
-					$label_id = -$line['id'] - 11;
+					$label_id = label_to_feed_id($line['id']);
 
 					$feed = $this->feedlist_init_feed($label_id, false, 0);
 
@@ -153,8 +186,9 @@ class Pref_Feeds extends Handler_Protected {
 		}
 
 		if ($enable_cats) {
-			$show_empty_cats = $_REQUEST['mode'] != 2 && !$search &&
-				get_pref($this->link, '_PREFS_SHOW_EMPTY_CATS');
+			$show_empty_cats = $_REQUEST['force_show_empty'] ||
+				($_REQUEST['mode'] != 2 && !$search &&
+				get_pref($this->link, '_PREFS_SHOW_EMPTY_CATS'));
 
 			$result = db_query($this->link, "SELECT id, title FROM ttrss_feed_categories
 				WHERE owner_uid = " . $_SESSION["uid"] . " AND parent_cat IS NULL ORDER BY order_id, title");
@@ -172,7 +206,7 @@ class Pref_Feeds extends Handler_Protected {
 
 				$cat['items'] = $this->get_category_items($line['id']);
 
-				$cat['param'] = T_sprintf('(%d feeds)', count($cat['items']));
+				$cat['param'] = vsprintf(_ngettext('(%d feed)', '(%d feeds)', count($cat['items'])), count($cat['items']));
 
 				if (count($cat['items']) > 0 || $show_empty_cats)
 					array_push($root['items'], $cat);
@@ -214,13 +248,13 @@ class Pref_Feeds extends Handler_Protected {
 				array_push($cat['items'], $feed);
 			}
 
-			$cat['param'] = T_sprintf('(%d feeds)', count($cat['items']));
+			$cat['param'] = vsprintf(_ngettext('(%d feed)', '(%d feeds)', count($cat['items'])), count($cat['items']));
 
 			if (count($cat['items']) > 0 || $show_empty_cats)
 				array_push($root['items'], $cat);
 
 			$root['param'] += count($cat['items']);
-			$root['param'] = T_sprintf('(%d feeds)', $root['param']);
+			$root['param'] = vsprintf(_ngettext('(%d feed)', '(%d feeds)', count($cat['items'])), count($cat['items']));
 
 		} else {
 			$feed_result = db_query($this->link, "SELECT id, title, last_error,
@@ -245,7 +279,7 @@ class Pref_Feeds extends Handler_Protected {
 				array_push($root['items'], $feed);
 			}
 
-			$root['param'] = T_sprintf('(%d feeds)', count($root['items']));
+			$root['param'] = vsprintf(_ngettext('(%d feed)', '(%d feeds)', count($cat['items'])), count($cat['items']));
 		}
 
 		$fl = array();
@@ -258,8 +292,7 @@ class Pref_Feeds extends Handler_Protected {
 			$fl['items'] =& $root['items'];
 		}
 
-		print json_encode($fl);
-		return;
+		return $fl;
 	}
 
 	function catsortreset() {
@@ -710,7 +743,9 @@ class Pref_Feeds extends Handler_Protected {
 
 		$feed_ids = db_escape_string($this->link, $_REQUEST["ids"]);
 
-		print "<div class=\"dialogNotice\">" . __("Enable the options you wish to apply using checkboxes on the right:") . "</div>";
+		print_notice("Enable the options you wish to apply using checkboxes on the right:");
+
+		print "<p>";
 
 		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"ids\" value=\"$feed_ids\">";
 		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"op\" value=\"pref-feeds\">";
@@ -1012,7 +1047,7 @@ class Pref_Feeds extends Handler_Protected {
 		$ids = split(",", db_escape_string($this->link, $_REQUEST["ids"]));
 
 		foreach ($ids as $id) {
-			$this->remove_feed($this->link, $id, $_SESSION["uid"]);
+			Pref_Feeds::remove_feed($this->link, $id, $_SESSION["uid"]);
 		}
 
 		return;
@@ -1365,7 +1400,7 @@ class Pref_Feeds extends Handler_Protected {
 
 		print __("Published OPML does not include your Tiny Tiny RSS settings, feeds that require authentication or feeds hidden from Popular feeds.") . "</p>";
 
-		print "<button dojoType=\"dijit.form.Button\" onclick=\"return displayDlg('pubOPMLUrl')\">".
+		print "<button dojoType=\"dijit.form.Button\" onclick=\"return displayDlg('".__("Public OPML URL")."','pubOPMLUrl')\">".
 			__('Display published OPML URL')."</button> ";
 
 		global $pluginhost;
@@ -1402,7 +1437,7 @@ class Pref_Feeds extends Handler_Protected {
 		$rss_url = '-2::' . htmlspecialchars(get_self_url_prefix() .
 				"/public.php?op=rss&id=-2&view-mode=all_articles");;
 
-		print "<button dojoType=\"dijit.form.Button\" onclick=\"return displayDlg('generatedFeed', '$rss_url')\">".
+		print "<button dojoType=\"dijit.form.Button\" onclick=\"return displayDlg('".__("View as RSS")."','generatedFeed', '$rss_url')\">".
 			__('Display URL')."</button> ";
 
 		print "<button dojoType=\"dijit.form.Button\" onclick=\"return clearFeedAccessKeys()\">".
@@ -1491,7 +1526,7 @@ class Pref_Feeds extends Handler_Protected {
 			GROUP BY ttrss_feeds.title, ttrss_feeds.id, ttrss_feeds.site_url, ttrss_feeds.feed_url
 			ORDER BY last_article");
 
-		print "<div class=\"dialogNotice\">" . __("These feeds have not been updated with new content for 3 months (oldest first):") . "</div>";
+		print "<h2" .__("These feeds have not been updated with new content for 3 months (oldest first):") . "</h2>";
 
 		print "<div dojoType=\"dijit.Toolbar\">";
 		print "<div dojoType=\"dijit.form.DropDownButton\">".
@@ -1557,7 +1592,8 @@ class Pref_Feeds extends Handler_Protected {
 	}
 
 	function feedsWithErrors() {
-		print "<div class=\"dialogNotice\">" . __("These feeds have not been updated because of errors:") . "</div>";
+		print "<h2>" . __("These feeds have not been updated because of errors:") .
+			"</h2>";
 
 		$result = db_query($this->link, "SELECT id,title,feed_url,last_error,site_url
 		FROM ttrss_feeds WHERE last_error != '' AND owner_uid = ".$_SESSION["uid"]);
@@ -1657,7 +1693,7 @@ class Pref_Feeds extends Handler_Protected {
 		ccache_remove($link, $id, $owner_uid, true);
 	}
 
-	private function remove_feed($link, $id, $owner_uid) {
+	static function remove_feed($link, $id, $owner_uid) {
 
 		if ($id > 0) {
 
@@ -1667,18 +1703,27 @@ class Pref_Feeds extends Handler_Protected {
 
 			/* prepare feed if necessary */
 
+			$result = db_query($link, "SELECT feed_url FROM ttrss_feeds WHERE id = $id
+				AND owner_uid = $owner_uid");
+
+			$feed_url = db_escape_string($link, db_fetch_result($result, 0, "feed_url"));
+
 			$result = db_query($link, "SELECT id FROM ttrss_archived_feeds
-				WHERE id = '$id'");
+				WHERE feed_url = '$feed_url' AND owner_uid = $owner_uid");
 
 			if (db_num_rows($result) == 0) {
 				db_query($link, "INSERT INTO ttrss_archived_feeds
 					(id, owner_uid, title, feed_url, site_url)
 				SELECT id, owner_uid, title, feed_url, site_url from ttrss_feeds
-			  	WHERE id = '$id'");
+				WHERE id = '$id'");
+
+				$archive_id = $id;
+			} else {
+				$archive_id = db_fetch_result($result, 0, "id");
 			}
 
 			db_query($link, "UPDATE ttrss_user_entries SET feed_id = NULL,
-				orig_feed_id = '$id' WHERE feed_id = '$id' AND
+				orig_feed_id = '$archive_id' WHERE feed_id = '$id' AND
 					marked = true AND owner_uid = $owner_uid");
 
 			/* Remove access key for the feed */
@@ -1700,10 +1745,59 @@ class Pref_Feeds extends Handler_Protected {
 			ccache_remove($link, $id, $owner_uid);
 
 		} else {
-			label_remove($link, -11-$id, $owner_uid);
-			ccache_remove($link, -11-$id, $owner_uid);
+			label_remove($link, feed_to_label_id($id), $owner_uid);
+			//ccache_remove($link, $id, $owner_uid); don't think labels are cached
 		}
 	}
+
+	function batchSubscribe() {
+		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"op\" value=\"rpc\">";
+		print "<input dojoType=\"dijit.form.TextBox\" style=\"display : none\" name=\"method\" value=\"batchaddfeeds\">";
+
+		print "<table width='100%'><tr><td>
+			".__("Add one valid RSS feed per line (no feed detection is done)")."
+		</td><td align='right'>";
+		if (get_pref($this->link, 'ENABLE_FEED_CATS')) {
+			print __('Place in category:') . " ";
+			print_feed_cat_select($this->link, "cat", false, 'dojoType="dijit.form.Select"');
+		}
+		print "</td></tr><tr><td colspan='2'>";
+		print "<textarea
+			style='font-size : 12px; width : 100%; height: 200px;'
+			placeHolder=\"".__("Feeds to subscribe, One per line")."\"
+			dojoType=\"dijit.form.SimpleTextarea\" required=\"1\" name=\"feeds\"></textarea>";
+
+		print "</td></tr><tr><td colspan='2'>";
+
+		print "<div id='feedDlg_loginContainer' style='display : none'>
+				" .
+				" <input dojoType=\"dijit.form.TextBox\" name='login'\"
+					placeHolder=\"".__("Login")."\"
+					style=\"width : 10em;\"> ".
+				" <input
+					placeHolder=\"".__("Password")."\"
+					dojoType=\"dijit.form.TextBox\" type='password'
+					style=\"width : 10em;\" name='pass'\">".
+				"</div>";
+
+		print "</td></tr><tr><td colspan='2'>";
+
+		print "<div style=\"clear : both\">
+			<input type=\"checkbox\" name=\"need_auth\" dojoType=\"dijit.form.CheckBox\" id=\"feedDlg_loginCheck\"
+					onclick='checkboxToggleElement(this, \"feedDlg_loginContainer\")'>
+				<label for=\"feedDlg_loginCheck\">".
+				__('Feeds require authentication.')."</div>";
+
+		print "</form>";
+
+		print "</td></tr></table>";
+
+		print "<div class=\"dlgButtons\">
+			<button dojoType=\"dijit.form.Button\" onclick=\"return dijit.byId('batchSubDlg').execute()\">".__('Subscribe')."</button>
+			<button dojoType=\"dijit.form.Button\" onclick=\"return dijit.byId('batchSubDlg').hide()\">".__('Cancel')."</button>
+			</div>";
+	}
+
 
 }
 ?>

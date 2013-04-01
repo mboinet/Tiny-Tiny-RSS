@@ -88,8 +88,6 @@ function viewfeed(feed, method, is_cat, offset, background, infscroll_req) {
 
 				_infscroll_request_sent = timestamp;
 			}
-
-			hideAuxDlg();
 		}
 
 		Form.enable("main_toolbar_form");
@@ -206,23 +204,6 @@ function request_counters(force) {
 	}
 }
 
-function displayNewContentPrompt(id) {
-	try {
-
-		var msg = "<a href='#' onclick='viewCurrentFeed()'>" +
-			__("New articles available in this feed (click to show)") + "</a>";
-
-		msg = msg.replace("%s", getFeedName(id));
-
-		$('auxDlg').innerHTML = msg;
-
-		new Effect.Appear('auxDlg', {duration : 0.5});
-
-	} catch (e) {
-		exception_error("displayNewContentPrompt", e);
-	}
-}
-
 function parse_counters(elems, scheduled_call) {
 	try {
 		for (var l = 0; l < elems.length; l++) {
@@ -243,10 +224,6 @@ function parse_counters(elems, scheduled_call) {
 			if (id == "subscribed-feeds") {
 				feeds_found = ctr;
 				continue;
-			}
-
-			if (id == getActiveFeedId() && ctr > getFeedUnread(id) && scheduled_call) {
-				displayNewContentPrompt(id);
 			}
 
 			if (getFeedUnread(id, (kind == "cat")) != ctr ||
@@ -403,8 +380,20 @@ function getNextUnreadFeed(feed, is_cat) {
 	}
 }
 
-function catchupCurrentFeed() {
-	return catchupFeed(getActiveFeedId(), activeFeedIsCat());
+function catchupCurrentFeed(elem) {
+
+	if (elem) {
+		var toolbar = document.forms["main_toolbar_form"];
+		var catchup_feed = dijit.getEnclosingWidget(toolbar.catchup_feed);
+		var mode = catchup_feed.attr('value');
+
+		if (mode != 'default') {
+			catchupFeed(getActiveFeedId(), activeFeedIsCat(), mode);
+			catchup_feed.attr('value', 'default');
+		}
+	} else {
+		catchupFeed(getActiveFeedId(), activeFeedIsCat());
+	}
 }
 
 function catchupFeedInGroup(id) {
@@ -423,11 +412,26 @@ function catchupFeedInGroup(id) {
 	}
 }
 
-function catchupFeed(feed, is_cat) {
+function catchupFeed(feed, is_cat, mode) {
 	try {
 		if (is_cat == undefined) is_cat = false;
 
-		var str = __("Mark all articles in %s as read?");
+		var str = false;
+
+		switch (mode) {
+		case "1day":
+			str = __("Mark all articles in %s older than 1 day as read?");
+			break;
+		case "1week":
+			str = __("Mark all articles in %s older than 1 week as read?");
+			break;
+		case "2weeks":
+			str = __("Mark all articles in %s older than 2 weeks as read?");
+			break;
+		default:
+			str = __("Mark all articles in %s as read?");
+		}
+
 		var fn = getFeedName(feed, is_cat);
 
 		str = str.replace("%s", fn);
@@ -436,20 +440,8 @@ function catchupFeed(feed, is_cat) {
 			return;
 		}
 
-		var max_id = 0;
-
-		if (feed == getActiveFeedId() && is_cat == activeFeedIsCat()) {
-			$$("#headlines-frame > div[id*=RROW]").each(
-				function(child) {
-					var id = parseInt(child.id.replace("RROW-", ""));
-
-					if (id > max_id) max_id = id;
-				}
-			);
-		}
-
 		var catchup_query = "?op=rpc&method=catchupFeed&feed_id=" +
-			feed + "&is_cat=" + is_cat + "&max_id=" + max_id;
+			feed + "&is_cat=" + is_cat + "&mode=" + mode;
 
 		console.log(catchup_query);
 
@@ -460,15 +452,6 @@ function catchupFeed(feed, is_cat) {
 			onComplete: function(transport) {
 					handle_rpc_json(transport);
 
-					if (feed == getActiveFeedId() && is_cat == activeFeedIsCat()) {
-
-						$$("#headlines-frame > div[id*=RROW][class*=Unread]").each(
-							function(child) {
-								child.removeClassName("Unread");
-							}
-						);
-					}
-
 					var show_next_feed = getInitParam("on_catchup_show_next_feed") == "1";
 
 					if (show_next_feed) {
@@ -476,6 +459,10 @@ function catchupFeed(feed, is_cat) {
 
 						if (nuf) {
 							viewfeed(nuf, '', is_cat);
+						}
+					} else {
+						if (feed == getActiveFeedId() && is_cat == activeFeedIsCat()) {
+							viewCurrentFeed();
 						}
 					}
 
@@ -513,3 +500,5 @@ function decrementFeedCounter(feed, is_cat) {
 		exception_error("decrement_feed_counter", e);
 	}
 }
+
+

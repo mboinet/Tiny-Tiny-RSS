@@ -19,14 +19,7 @@ class Pref_Users extends Handler_Protected {
 
 		function userdetails() {
 
-			header("Content-Type: text/xml");
-			print "<dlg>";
-
 			$uid = sprintf("%d", $_REQUEST["id"]);
-
-			print "<title>".__('User details')."</title>";
-
-			print "<content><![CDATA[";
 
 			$result = db_query($this->link, "SELECT login,
 				".SUBSTRING_FOR_DATE."(last_login,1,16) AS last_login,
@@ -106,22 +99,13 @@ class Pref_Users extends Handler_Protected {
 				<button onclick=\"closeInfoBox()\">".__("Close this window").
 				"</button></div>";
 
-			print "]]></content></dlg>";
-
 			return;
 		}
 
 		function edit() {
 			global $access_level_names;
 
-			header("Content-Type: text/xml");
-
 			$id = db_escape_string($this->link, $_REQUEST["id"]);
-
-			print "<dlg id=\"$method\">";
-			print "<title>".__('User Editor')."</title>";
-			print "<content><![CDATA[";
-
 			print "<form id=\"user_edit_form\" onsubmit='return false'>";
 
 			print "<input type=\"hidden\" name=\"id\" value=\"$id\">";
@@ -193,8 +177,6 @@ class Pref_Users extends Handler_Protected {
 				<button onclick=\"return userEditCancel()\">".
 					__('Cancel')."</button></div>";
 
-			print "]]></content></dlg>";
-
 			return;
 		}
 
@@ -203,7 +185,7 @@ class Pref_Users extends Handler_Protected {
 			$uid = db_escape_string($this->link, $_REQUEST["id"]);
 			$access_level = (int) $_REQUEST["access_level"];
 			$email = db_escape_string($this->link, trim($_REQUEST["email"]));
-			$password = db_escape_string($this->link, trim($_REQUEST["password"]));
+			$password = $_REQUEST["password"];
 
 			if ($password) {
 				$salt = substr(bin2hex(get_random_bytes(125)), 0, 250);
@@ -288,11 +270,9 @@ class Pref_Users extends Handler_Protected {
 				WHERE id = '$uid'");
 
 			if ($show_password) {
-				print T_sprintf("Changed password of user <b>%s</b>
-					to <b>%s</b>", $login, $tmp_user_pwd);
+				print T_sprintf("Changed password of user <b>%s</b> to <b>%s</b>", $login, $tmp_user_pwd);
 			} else {
-				print T_sprintf("Sending new password of user <b>%s</b>
-					to <b>%s</b>", $login, $email);
+				print_notice(T_sprintf("Sending new password of user <b>%s</b> to <b>%s</b>", $login, $email));
 			}
 
 			require_once 'classes/ttrssmailer.php';

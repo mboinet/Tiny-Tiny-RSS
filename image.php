@@ -28,7 +28,11 @@
 
 		if (file_exists($filename)) {
 			header("Content-type: image/png");
-			echo file_get_contents($filename);
+			$stamp = gmdate("D, d M Y H:i:s", filemtime($filename)). " GMT";
+			header("Last-Modified: $stamp", true);
+
+			readfile($filename);
+
 		} else {
 			header($_SERVER["SERVER_PROTOCOL"]." 404 Not Found");
 			echo "File not found.";

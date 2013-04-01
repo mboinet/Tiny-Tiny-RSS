@@ -12,23 +12,40 @@ class Handler_Public extends Handler {
 			"padding : 5px; border-style : dashed; border-color : #e7d796;".
 			"margin-bottom : 1em; color : #9a8c59;";
 
-		if (!$limit) $limit = 100;
+		if (!$limit) $limit = 60;
 
-		if (get_pref($this->link, "SORT_HEADLINES_BY_FEED_DATE", $owner_uid)) {
-			$date_sort_field = "updated";
-		} else {
-			$date_sort_field = "date_entered";
-		}
+		$date_sort_field = "date_entered DESC, updated DESC";
 
 		if ($feed == -2)
-			$date_sort_field = "last_published";
+			$date_sort_field = "last_published DESC";
 		else if ($feed == -1)
-			$date_sort_field = "last_marked";
+			$date_sort_field = "last_marked DESC";
+
+		$qfh_ret = queryFeedHeadlines($this->link, $feed,
+			1, $view_mode, $is_cat, $search, $search_mode,
+			$date_sort_field, $offset, $owner_uid,
+			false, 0, false, true);
+
+		$result = $qfh_ret[0];
+
+		if (db_num_rows($result) != 0) {
+			$ts = strtotime(db_fetch_result($result, 0, "date_entered"));
+
+			if (isset($_SERVER['HTTP_IF_MODIFIED_SINCE']) &&
+					strtotime($_SERVER['HTTP_IF_MODIFIED_SINCE']) >= $ts) {
+		      header('HTTP/1.0 304 Not Modified');
+		      return;
+			}
+
+			$last_modified = gmdate("D, d M Y H:i:s", $ts) . " GMT";
+			header("Last-Modified: $last_modified", true);
+		}
 
 		$qfh_ret = queryFeedHeadlines($this->link, $feed,
 			$limit, $view_mode, $is_cat, $search, $search_mode,
-			"$date_sort_field DESC", $offset, $owner_uid,
+			$date_sort_field, $offset, $owner_uid,
 			false, 0, false, true);
+
 
 		$result = $qfh_ret[0];
 		$feed_title = htmlspecialchars($qfh_ret[1]);
@@ -57,7 +74,8 @@ class Handler_Public extends Handler {
 
 			$tpl->setVariable('SELF_URL', htmlspecialchars(get_self_url_prefix()), true);
 
-	 		while ($line = db_fetch_assoc($result)) {
+			while ($line = db_fetch_assoc($result)) {
+
 				$tpl->setVariable('ARTICLE_ID', htmlspecialchars($line['link']), true);
 				$tpl->setVariable('ARTICLE_LINK', htmlspecialchars($line['link']), true);
 				$tpl->setVariable('ARTICLE_TITLE', htmlspecialchars($line['title']), true);
@@ -69,7 +87,8 @@ class Handler_Public extends Handler {
 				if ($line['note']) {
 					$content = "<div style=\"$note_style\">Article note: " . $line['note'] . "</div>" .
 						$content;
-}
+					$tpl->setVariable('ARTICLE_NOTE', htmlspecialchars($line['note']), true);
+				}
 
 				$tpl->setVariable('ARTICLE_CONTENT', $content, true);
 
@@ -349,6 +368,18 @@ class Handler_Public extends Handler {
 		include "rssfuncs.php";
 		// Update all feeds needing a update.
 		update_daemon_common($this->link, 0, true, false);
+
+		// Update feedbrowser
+		update_feedbrowser_cache($this->link);
+
+		// Purge orphans and cleanup tags
+		purge_orphans($this->link);
+
+		cleanup_tags($this->link, 14, 50000);
+
+		global $pluginhost;
+		$pluginhost->run_hooks($pluginhost::HOOK_UPDATE_TASK, "hook_update_task", $op);
+
 	}
 
 	function sharepopup() {
@@ -357,15 +388,13 @@ class Handler_Public extends Handler {
 		}
 
 		header('Content-Type: text/html; charset=utf-8');
-		print "<html>
-				<head>
-					<title>Tiny Tiny RSS</title>
-					<link rel=\"stylesheet\" type=\"text/css\" href=\"utility.css\">
-					<script type=\"text/javascript\" src=\"lib/prototype.js\"></script>
-					<script type=\"text/javascript\" src=\"lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls\"></script>
-					<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
-				</head>
-				<body id='sharepopup'>";
+		print "<html><head><title>Tiny Tiny RSS</title>";
+
+		print stylesheet_tag("utility.css");
+		print javascript_tag("lib/prototype.js");
+		print javascript_tag("lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls");
+		print "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
+			</head><body id='sharepopup'>";
 
 		$action = $_REQUEST["action"];
 
@@ -480,7 +509,6 @@ class Handler_Public extends Handler {
 	}
 
 	function login() {
-
 		$_SESSION["prefs_cache"] = array();
 
 		if (!SINGLE_USER_MODE) {
@@ -488,6 +516,14 @@ class Handler_Public extends Handler {
 			$login = db_escape_string($this->link, $_POST["login"]);
 			$password = $_POST["password"];
 			$remember_me = $_POST["remember_me"];
+
+			if ($remember_me) {
+				session_set_cookie_params(SESSION_COOKIE_LIFETIME);
+			} else {
+				session_set_cookie_params(0);
+			}
+
+			@session_start();
 
 			if (authenticate_user($this->link, $login, $password)) {
 				$_POST["password"] = "";
@@ -537,9 +573,9 @@ class Handler_Public extends Handler {
 					<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
 				</head>
 				<body>
-				<img class=\"floatingLogo\" src=\"images/logo_wide.png\"
+				<img class=\"floatingLogo\" src=\"images/logo_small.png\"
 			  		alt=\"Tiny Tiny RSS\"/>
-					<h1>".__("Subscribe to feed...")."</h1>";
+					<h1>".__("Subscribe to feed...")."</h1><div class='content'>";
 
 			$rc = subscribe_to_feed($this->link, $feed_url);
 
@@ -612,7 +648,7 @@ class Handler_Public extends Handler {
 				<input type=\"submit\" value=\"".__("Return to Tiny Tiny RSS")."\">
 				</form></p>";
 
-			print "</body></html>";
+			print "</div></body></html>";
 
 		} else {
 			render_login_form($this->link);
@@ -710,27 +746,24 @@ class Handler_Public extends Handler {
 
 	function forgotpass() {
 		header('Content-Type: text/html; charset=utf-8');
-		print "<html>
-				<head>
-					<title>Tiny Tiny RSS</title>
-					<link rel=\"stylesheet\" type=\"text/css\" href=\"utility.css\">
-					<script type=\"text/javascript\" src=\"lib/prototype.js\"></script>
-					<script type=\"text/javascript\" src=\"lib/scriptaculous/scriptaculous.js?load=effects,dragdrop,controls\"></script>
-					<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
-				</head>
-				<body id='forgotpass'>";
+		print "<html><head><title>Tiny Tiny RSS</title>";
 
-		print '<div class="floatingLogo"><img src="images/logo_wide.png"></div>';
-		print "<h1>".__("Reset password")."</h1>";
+		print stylesheet_tag("utility.css");
+		print javascript_tag("lib/prototype.js");
+
+		print "<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\"/>
+			</head><body id='forgotpass'>";
+
+		print '<div class="floatingLogo"><img src="images/logo_small.png"></div>';
+		print "<h1>".__("Password recovery")."</h1>";
+		print "<div class='content'>";
 
 		@$method = $_POST['method'];
 
 		if (!$method) {
-			$secretkey = uniqid();
-			$_SESSION["secretkey"] = $secretkey;
+			print_notice(__("You will need to provide valid account name and email. New password will be sent on your email address."));
 
 			print "<form method='POST' action='public.php'>";
-			print "<input type='hidden' name='secretkey' value='$secretkey'>";
 			print "<input type='hidden' name='method' value='do'>";
 			print "<input type='hidden' name='op' value='forgotpass'>";
 
@@ -755,7 +788,6 @@ class Handler_Public extends Handler {
 			print "</form>";
 		} else if ($method == 'do') {
 
-			$secretkey = $_POST["secretkey"];
 			$login = db_escape_string($this->link, $_POST["login"]);
 			$email = db_escape_string($this->link, $_POST["email"]);
 			$test = db_escape_string($this->link, $_POST["test"]);
@@ -763,9 +795,12 @@ class Handler_Public extends Handler {
 			if (($test != 4 && $test != 'four') || !$email || !$login) {
 				print_error(__('Some of the required form parameters are missing or incorrect.'));
 
-				print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
+				print "<form method=\"GET\" action=\"public.php\">
+					<input type=\"hidden\" name=\"op\" value=\"forgotpass\">
+					<input type=\"submit\" value=\"".__("Go back")."\">
+					</form>";
 
-			} else if ($_SESSION["secretkey"] == $secretkey) {
+			} else {
 
 				$result = db_query($this->link, "SELECT id FROM ttrss_users
 					WHERE login = '$login' AND email = '$email'");
@@ -775,21 +810,28 @@ class Handler_Public extends Handler {
 
 					Pref_Users::resetUserPassword($this->link, $id, false);
 
-					print "<p>".__("Completed.")."</p>";
+					print "<p>";
+
+					print "<p>"."Completed."."</p>";
+
+					print "<form method=\"GET\" action=\"index.php\">
+						<input type=\"submit\" value=\"".__("Return to Tiny Tiny RSS")."\">
+						</form>";
 
 				} else {
 					print_error(__("Sorry, login and email combination not found."));
-					print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
+
+					print "<form method=\"GET\" action=\"public.php\">
+						<input type=\"hidden\" name=\"op\" value=\"forgotpass\">
+						<input type=\"submit\" value=\"".__("Go back")."\">
+						</form>";
+
 				}
-
-			} else {
-				print_error(__("Form secret key incorrect. Please enable cookies and try again."));
-				print "<p><a href=\"public.php?op=forgotpass\">".__("Go back")."</a></p>";
-
 			}
 
 		}
 
+		print "</div>";
 		print "</body>";
 		print "</html>";
 

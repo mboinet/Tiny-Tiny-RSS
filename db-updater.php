@@ -39,9 +39,11 @@ function confirmOP() {
 }
 </script>
 
-<div class="floatingLogo"><img src="images/logo_wide.png"></div>
+<div class="floatingLogo"><img src="images/logo_small.png"></div>
 
 <h1><?php echo __("Database Updater") ?></h1>
+
+<div class="content">
 
 <?php
 	function getline($fp, $delim) {
@@ -155,8 +157,8 @@ function confirmOP() {
 			}
 		}
 
-		print "<p>".T_sprintf("Finished. Performed <b>%d</b> update(s) up to schema
-			version <b>%d</b>.", $num_updates, $version)."</p>";
+		print "<p>".sprintf(ngettext("Finished. Performed <b>%d</b> update up to schema version <b>%d</b>.",
+			"Finished. Performed <b>%d</b> updates up to schema version <b>%d</b>.", $num_updates), $num_updates, $version)."</p>";
 
 		print "<form method=\"GET\" action=\"backend.php\">
 			<input type=\"hidden\" name=\"op\" value=\"logout\">
@@ -180,6 +182,8 @@ function confirmOP() {
 	}
 
 ?>
+
+</div>
 
 </body>
 </html>

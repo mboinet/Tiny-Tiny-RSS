@@ -106,7 +106,7 @@ dojo.declare("fox.FeedTree", dijit.Tree, {
 		var id = args.item.id[0];
 		var bare_id = parseInt(id.substr(id.indexOf(':')+1));
 
-		if (bare_id < -10) {
+		if (bare_id < _label_base_index) {
 			var span = dojo.doc.createElement('span');
 			var fg_color = args.item.fg_color[0];
 			var bg_color = args.item.bg_color[0];
@@ -218,7 +218,63 @@ dojo.declare("fox.FeedTree", dijit.Tree, {
 
 		return label;
 	},
+	expandParentNodes: function(feed, is_cat, list) {
+		try {
+			for (var i = 0; i < list.length; i++) {
+				var id = String(list[i].id);
+				var item = this._itemNodesMap[id];
+
+				if (item) {
+					item = item[0];
+					this._expandNode(item);
+				}
+			}
+		} catch (e) {
+			exception_error("expandParentNodes", e);
+		}
+	},
+	findNodeParentsAndExpandThem: function(feed, is_cat, root, parents) {
+		// expands all parents of specified feed to properly mark it as active
+		// my fav thing about frameworks is doing everything myself
+		try {
+			var test_id = is_cat ? 'CAT:' + feed : 'FEED:' + feed;
+
+			if (!root) {
+				if (!this.model || !this.model.store) return false;
+
+				var items = this.model.store._arrayOfTopLevelItems;
+
+				for (var i = 0; i < items.length; i++) {
+					if (String(items[i].id) == test_id) {
+						this.expandParentNodes(feed, is_cat, parents);
+					} else {
+						this.findNodeParentsAndExpandThem(feed, is_cat, items[i], []);
+					}
+				}
+			} else {
+				if (root.items) {
+					parents.push(root);
+
+					for (var i = 0; i < root.items.length; i++) {
+						if (String(root.items[i].id) == test_id) {
+							this.expandParentNodes(feed, is_cat, parents);
+						} else {
+							this.findNodeParentsAndExpandThem(feed, is_cat, root.items[i], parents);
+						}
+					}
+				} else {
+					if (String(root.id) == test_id) {
+						this.expandParentNodes(feed, is_cat, parents);
+					}
+				}
+			}
+		} catch (e) {
+			exception_error("findNodeParentsAndExpandThem", e);
+		}
+	},
 	selectFeed: function(feed, is_cat) {
+		this.findNodeParentsAndExpandThem(feed, is_cat, false, false);
+
 		if (is_cat)
 			treeNode = this._itemNodesMap['CAT:' + feed];
 		else
@@ -324,7 +380,7 @@ dojo.declare("fox.FeedTree", dijit.Tree, {
 				var node = tree._itemNodesMap[id];
 
 				if (node) {
-					if (hide && unread == 0 && (bare_id > 0 || bare_id < -10 || !show_special)) {
+					if (hide && unread == 0 && (bare_id > 0 || bare_id < _label_base_index || !show_special)) {
 						Effect.Fade(node[0].rowNode, {duration : 0.3,
 							queue: { position: 'end', scope: 'FFADE-' + id, limit: 1 }});
 					} else {
