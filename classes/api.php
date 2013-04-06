@@ -237,13 +237,23 @@ class API extends Handler {
 			$include_nested = sql_bool_to_bool($_REQUEST["include_nested"]);
 			$sanitize_content = true;
 
+			$override_order = false;
+			switch ($_REQUEST["order_by"]) {
+				case "date_reverse":
+					$override_order = "date_entered, updated";
+					break;
+				case "feed_dates":
+					$override_order = "updated DESC";
+					break;
+			}
+
 			/* do not rely on params below */
 
 			$search = db_escape_string($this->link, $_REQUEST["search"]);
 			$search_mode = db_escape_string($this->link, $_REQUEST["search_mode"]);
 
 			$headlines = $this->api_get_headlines($this->link, $feed_id, $limit, $offset,
-				$filter, $is_cat, $show_excerpt, $show_content, $view_mode, false,
+				$filter, $is_cat, $show_excerpt, $show_content, $view_mode, $override_order,
 				$include_attachments, $since_id, $search, $search_mode,
 				$include_nested, $sanitize_content);
 
@@ -367,6 +377,12 @@ class API extends Handler {
 					"feed_id" => $line["feed_id"],
 					"attachments" => $attachments
 				);
+
+				global $pluginhost;
+				foreach ($pluginhost->get_hooks($pluginhost::HOOK_RENDER_ARTICLE_API) as $p) {
+					$article = $p->hook_render_article_api(array("article" => $article));
+				}
+
 
 				array_push($articles, $article);
 
@@ -708,7 +724,7 @@ class API extends Handler {
 
 				global $pluginhost;
 				foreach ($pluginhost->get_hooks($pluginhost::HOOK_RENDER_ARTICLE_API) as $p) {
-					$headline_row = $p->hook_render_article_api($headline_row);
+					$headline_row = $p->hook_render_article_api(array("headline" => $headline_row));
 				}
 
 				array_push($headlines, $headline_row);

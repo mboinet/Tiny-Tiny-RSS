@@ -1,6 +1,6 @@
 <?php
 	define('EXPECTED_CONFIG_VERSION', 26);
-	define('SCHEMA_VERSION', 114);
+	define('SCHEMA_VERSION', 115);
 
 	define('LABEL_BASE_INDEX', -1024);
 	define('PLUGIN_FEED_BASE_INDEX', -128);
@@ -30,13 +30,36 @@
 
 	require_once 'config.php';
 
+	/**
+	 * Define a constant if not already defined
+	 *
+	 * @param string $name The constant name.
+	 * @param mixed $value The constant value.
+	 * @access public
+	 * @return boolean True if defined successfully or not.
+	 */
+	function define_default($name, $value) {
+		defined($name) or define($name, $value);
+	}
+
+	///// Some defaults that you can override in config.php //////
+
+	define_default('FEED_FETCH_TIMEOUT', 45);
+	// How may seconds to wait for response when requesting feed from a site
+	define_default('FEED_FETCH_NO_CACHE_TIMEOUT', 15);
+	// How may seconds to wait for response when requesting feed from a
+	// site when that feed wasn't cached before
+	define_default('FILE_FETCH_TIMEOUT', 45);
+	// Default timeout when fetching files from remote sites
+	define_default('FILE_FETCH_CONNECT_TIMEOUT', 15);
+	// How many seconds to wait for initial response from website when
+	// fetching files from remote sites
+
 	if (DB_TYPE == "pgsql") {
 		define('SUBSTRING_FOR_DATE', 'SUBSTRING_FOR_DATE');
 	} else {
 		define('SUBSTRING_FOR_DATE', 'SUBSTRING');
 	}
-
-	define('THEME_VERSION_REQUIRED', 1.1);
 
 	/**
 	 * Return available translations names.
@@ -295,7 +318,7 @@
 		global $fetch_last_error;
 		global $fetch_last_error_code;
 
-		if (function_exists('curl_init') && !ini_get("open_basedir")) {
+		if (!defined('NO_CURL') && function_exists('curl_init') && !ini_get("open_basedir")) {
 
 			if (ini_get("safe_mode")) {
 				$ch = curl_init(geturl($url));
@@ -308,8 +331,8 @@
 					array("If-Modified-Since: ".gmdate('D, d M Y H:i:s \G\M\T', $timestamp)));
 			}
 
-			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout ? $timeout : 15);
-			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout ? $timeout : 45);
+			curl_setopt($ch, CURLOPT_CONNECTTIMEOUT, $timeout ? $timeout : FILE_FETCH_CONNECT_TIMEOUT);
+			curl_setopt($ch, CURLOPT_TIMEOUT, $timeout ? $timeout : FILE_FETCH_TIMEOUT);
 			curl_setopt($ch, CURLOPT_FOLLOWLOCATION, !ini_get("safe_mode"));
 			curl_setopt($ch, CURLOPT_MAXREDIRS, 20);
 			curl_setopt($ch, CURLOPT_BINARYTRANSFER, true);
@@ -373,9 +396,6 @@
 			}
 
 			$data = @file_get_contents($url);
-
-			@$gzdecoded = gzdecode($data);
-			if ($gzdecoded) $data = $gzdecoded;
 
 			if (!$data && function_exists('error_get_last')) {
 				$error = error_get_last();
@@ -724,7 +744,9 @@
 			cache_prefs($link);
 			load_user_plugins($link, $_SESSION["uid"]);
 		} else {
-			if (!$_SESSION["uid"] || !validate_session($link)) {
+			if (!validate_session($link)) $_SESSION["uid"] = false;
+
+			if (!$_SESSION["uid"]) {
 
 				if (AUTH_AUTO_LOGIN && authenticate_user($link, null, null)) {
 				    $_SESSION["ref_schema_version"] = get_schema_version($link, true);
@@ -732,7 +754,12 @@
 					 authenticate_user($link, null, null, true);
 				}
 
-				if (!$_SESSION["uid"]) render_login_form($link);
+				if (!$_SESSION["uid"]) {
+					render_login_form($link);
+					@session_destroy();
+					setcookie(session_name(), '', time()-42000, '/');
+					exit;
+				}
 
 			} else {
 				/* bump login timestamp */
@@ -1053,9 +1080,9 @@
 						$intl = get_pref($link, "FRESH_ARTICLE_MAX_AGE");
 
 						if (DB_TYPE == "pgsql") {
-							$match_part = "updated > NOW() - INTERVAL '$intl hour' ";
+							$match_part = "date_entered > NOW() - INTERVAL '$intl hour' ";
 						} else {
-							$match_part = "updated > DATE_SUB(NOW(),
+							$match_part = "date_entered > DATE_SUB(NOW(),
 								INTERVAL $intl HOUR) ";
 						}
 
@@ -1063,7 +1090,7 @@
 							SET unread = false, last_read = NOW() WHERE ref_id IN
 								(SELECT id FROM
 									(SELECT id FROM ttrss_entries, ttrss_user_entries WHERE ref_id = id
-										AND owner_uid = $owner_uid AND unread = true AND feed_id = $feed AND $date_qpart AND $match_part) as tmp)");
+										AND owner_uid = $owner_uid AND unread = true AND $date_qpart AND $match_part) as tmp)");
 					}
 
 					if ($feed == -4) {
@@ -1840,7 +1867,7 @@
 
 		foreach (array("ON_CATCHUP_SHOW_NEXT_FEED", "HIDE_READ_FEEDS",
 			"ENABLE_FEED_CATS", "FEEDS_SORT_BY_UNREAD", "CONFIRM_FEED_CATCHUP",
-			"CDM_AUTO_CATCHUP", "FRESH_ARTICLE_MAX_AGE", "DEFAULT_ARTICLE_LIMIT",
+			"CDM_AUTO_CATCHUP", "FRESH_ARTICLE_MAX_AGE",
 			"HIDE_READ_SHOWS_SPECIAL", "COMBINED_DISPLAY_MODE") as $param) {
 
 				 $params[strtolower($param)] = (int) get_pref($link, $param);
@@ -1933,6 +1960,11 @@
 				"collapse_sidebar" => __("Un/collapse sidebar"),
 				"help_dialog" => __("Show help dialog"))
 			);
+
+		global $pluginhost;
+		foreach ($pluginhost->get_hooks($pluginhost::HOOK_HOTKEY_INFO) as $plugin) {
+			$hotkeys = $plugin->hook_hotkey_info($hotkeys);
+		}
 
 		return $hotkeys;
 	}
@@ -2380,6 +2412,7 @@
 
 				$vfeed_query_part = "ttrss_feeds.title AS feed_title,";
 			} else if ($feed == -4) { // all articles virtual feed
+				$allow_archived = true;
 				$query_strategy_part = "true";
 				$vfeed_query_part = "ttrss_feeds.title AS feed_title,";
 			} else if ($feed <= LABEL_BASE_INDEX) { // labels
@@ -2397,13 +2430,7 @@
 				$query_strategy_part = "true";
 			}
 
-			if (get_pref($link, "SORT_HEADLINES_BY_FEED_DATE", $owner_uid)) {
-				$date_sort_field = "updated";
-			} else {
-				$date_sort_field = "date_entered";
-			}
-
-			$order_by = "$date_sort_field DESC, updated DESC";
+			$order_by = "score DESC, date_entered DESC, updated DESC";
 
 			if ($view_mode == "unread_first") {
 				$order_by = "unread DESC, $order_by";
@@ -3405,6 +3432,8 @@
 			$parent_qpart = "parent_cat IS NULL";
 			$parent_insert = "NULL";
 		}
+
+		$feed_cat = mb_substr($feed_cat, 0, 250);
 
 		$result = db_query($link,
 			"SELECT id FROM ttrss_feed_categories

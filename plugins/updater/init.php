@@ -42,7 +42,7 @@ class Updater extends Plugin {
 			case 0:
 				array_push($log, "Work directory: $work_dir");
 
-				if (!is_writable($work_dir) && !is_writable("$parent_dir")) {
+				if (!is_writable($work_dir) || !is_writable("$parent_dir")) {
 					$user = posix_getpwuid(posix_geteuid());
 					$user = $user["name"];
 					array_push($log, "Both tt-rss and parent directories should be writable as current user ($user).");
@@ -58,6 +58,10 @@ class Updater extends Plugin {
 					array_push($log, "System temporary directory should be writable as current user.");
 					$stop = true; break;
 				}
+
+				// bah, also humbug
+				putenv("PATH=" . getenv("PATH") . PATH_SEPARATOR . "/bin" .
+					PATH_SEPARATOR . "/usr/bin");
 
 				array_push($log, "Checking for tar...");
 

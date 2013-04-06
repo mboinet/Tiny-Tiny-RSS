@@ -12,8 +12,7 @@ var catchup_timeout_id = false;
 
 var cids_requested = [];
 var loaded_article_ids = [];
-
-var _post_preview_timeout = false;
+var _last_headlines_update = 0;
 
 var has_storage = 'sessionStorage' in window && window['sessionStorage'] !== null;
 
@@ -66,7 +65,7 @@ function headlines_callback2(transport, offset, background, infscroll_req) {
 
 			vgroup_last_feed = reply['headlines-info']['vgroup_last_feed'];
 
-			if (parseInt(headlines_count) < getInitParam("default_article_limit")) {
+			if (parseInt(headlines_count) < 30) {
 				_infscroll_disable = 1;
 			} else {
 				_infscroll_disable = 0;
@@ -206,6 +205,7 @@ function headlines_callback2(transport, offset, background, infscroll_req) {
 		}
 
 		_infscroll_request_sent = 0;
+		_last_headlines_update = new Date().getTime();
 
 		unpackVisibleHeadlines();
 
@@ -680,7 +680,7 @@ function selectionRemoveLabel(id, ids) {
 			return;
 		}
 
-		var query = "?op=rpc&method=removeFromLabel&ids=" +
+		var query = "?op=article&method=removeFromLabel&ids=" +
 			param_escape(ids.toString()) + "&lid=" + param_escape(id);
 
 		console.log(query);
@@ -708,7 +708,7 @@ function selectionAssignLabel(id, ids) {
 			return;
 		}
 
-		var query = "?op=rpc&method=assignToLabel&ids=" +
+		var query = "?op=article&method=assignToLabel&ids=" +
 			param_escape(ids.toString()) + "&lid=" + param_escape(id);
 
 		console.log(query);
@@ -1116,7 +1116,7 @@ function editArticleTags(id) {
 	   	dojo.disconnect(tmph);
 
 			new Ajax.Autocompleter('tags_str', 'tags_choices',
-			   "backend.php?op=rpc&method=completeTags",
+			   "backend.php?op=article&method=completeTags",
 			   { tokens: ',', paramName: "search" });
 		});
 
@@ -1153,58 +1153,14 @@ function getActiveArticleId() {
 
 function postMouseIn(e, id) {
 	post_under_pointer = id;
-
-	if (_post_preview_timeout) window.clearTimeout(_post_preview_timeout);
-
-	/* if (!isCdmMode() || !getInitParam("cdm_expanded")) {
-		_post_preview_timeout = window.setTimeout(function() {
-			displaySmallArticlePreview(e, id);
-		}, 1000);
-	} */
-}
-
-function displaySmallArticlePreview(e, id) {
-	try {
-		var query = "?op=rpc&method=cdmarticlepreview&id=" + id;
-
-		new Ajax.Request("backend.php", {
-			parameters: query,
-			onComplete: function(transport) {
-				cexc = $("CEXC-" + id);
-				preview = $("small_article_preview");
-				row = $("RROW-" + id);
-				ctr = $("headlines-frame");
-
-				if (id != getActiveArticleId() && (!isCdmMode() || (cexc && Element.visible(cexc))) && row && preview) {
-					preview.innerHTML = transport.responseText;
-					new Effect.Appear(preview, {duration:0.2});
-
-					preview.setStyle({
-						left: (e.clientX + 20) + 'px',
-						top: (row.offsetTop + row.offsetHeight*2 + 20 - ctr.scrollTop) + 'px' });
-
-				}
-
-			} });
-
-
-	} catch (e) {
-		exception_error("displaySmallArticlePreview", e);
-	}
 }
 
 function postMouseOut(id) {
 	post_under_pointer = false;
-
-	if (_post_preview_timeout) window.clearTimeout(_post_preview_timeout);
-
-	if (Element.visible("small_article_preview"))
-		Element.hide("small_article_preview");
 }
 
 function unpackVisibleHeadlines() {
 	try {
-
 		if (!isCdmMode()) return;
 
 		$$("#headlines-frame > div[id*=RROW]").each(
@@ -1222,7 +1178,6 @@ function unpackVisibleHeadlines() {
 				}
 			}
 		);
-
 
 	} catch (e) {
 		exception_error("unpackVisibleHeadlines", e);
@@ -1253,6 +1208,10 @@ function headlines_scroll_handler(e) {
 		}
 
 		if (getInitParam("cdm_auto_catchup") == 1) {
+
+			// let's get DOM some time to settle down
+			var ts = new Date().getTime();
+			if (ts - _last_headlines_update < 100) return;
 
 			$$("#headlines-frame > div[id*=RROW][class*=Unread]").each(
 				function(child) {
@@ -1299,7 +1258,11 @@ function catchupBatchedArticles() {
 				onComplete: function(transport) {
 					handle_rpc_json(transport);
 
+					reply = JSON.parse(transport.responseText);
+					var batch = reply.ids;
+
 					batch.each(function(id) {
+						console.log(id);
 						var elem = $("RROW-" + id);
 						if (elem) elem.removeClassName("Unread");
 						catchup_id_batch.remove(id);
@@ -2065,7 +2028,7 @@ function setSelectionScore() {
 			var score = prompt(__("Please enter new score for selected articles:"), score);
 
 			if (score != undefined) {
-				var query = "op=rpc&method=setScore&id=" + param_escape(ids.toString()) +
+				var query = "op=article&method=setScore&id=" + param_escape(ids.toString()) +
 					"&score=" + param_escape(score);
 
 				new Ajax.Request("backend.php", {
@@ -2108,7 +2071,7 @@ function changeScore(id, pic) {
 
 		if (new_score != undefined) {
 
-			var query = "op=rpc&method=setScore&id=" + param_escape(id) +
+			var query = "op=article&method=setScore&id=" + param_escape(id) +
 				"&score=" + param_escape(new_score);
 
 			new Ajax.Request("backend.php", {
